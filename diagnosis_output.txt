@@ -1,0 +1,45 @@
+Checking for tenders: ['TND-2026-00013', 'TND-2026-00014']
+
+[FOUND] Tender TND-2026-00013:
+  Project: Invitation to Bid — High-Rise Commercial Tower (G+22) | TND-2026-00002
+  Client: Neom
+  Source: None
+  Source Email: None
+  Source Sender: None
+  Created At: 2026-02-24 16:46:54.695924
+  [FOUND] Associated Email (by tender_id):
+    ID: 19c752ae2bd10d87
+    Subject: Invitation to Bid — High-Rise Commercial Tower (G+22) | TND-2026-00002
+    Sender: Ai News agent <aiagent.bot143@gmail.com>
+
+[FOUND] Tender TND-2026-00014:
+  Project: Invitation to Bid: Industrial Warehouse Construction - TND-2026-00001
+  Client: Neom
+  Source: None
+  Source Email: None
+  Source Sender: None
+  Created At: 2026-02-24 16:49:38.906943
+  [FOUND] Associated Email (by tender_id):
+    ID: 19c74f71508eb984
+    Subject: Invitation to Bid: Industrial Warehouse Construction - TND-2026-00001
+    Sender: Atif Ali <atifjee7.124@gmail.com>
+
+--- Latest 20 Tenders in DB ---
+  2026-02-24 16:49:38.906943 | TND-2026-00014 | Invitation to Bid: Industrial  | Source: None
+  2026-02-24 16:46:54.695924 | TND-2026-00013 | Invitation to Bid — High-Rise  | Source: None
+  2026-02-24 16:38:59.178467 | TND-2026-00012 | Invitation to Bid — Cable-Stay | Source: None
+  2026-02-20 14:51:39.234585 | TND-2026-00011 | URGENT: Request for Quotation  | Source: None
+  2026-02-18 13:17:21.966905 | TND-2026-00010 | Fwd: RFQ-NEOM-2026-002 - HVAC  | Source: None
+  2026-02-13 12:44:34.723887 | TND-2026-00009 | qutations | Source: None
+  2026-02-13 12:42:31.173673 | TND-2026-00008 | RFQ-RSG-2026-X - Marina Infras | Source: None
+  2026-02-11 14:45:09.480643 | TND-2026-00007 | TENDER_RFQ_2026_AU - Al-Ula Cu | Source: None
+  2026-02-11 11:47:28.677171 | TND-2026-00006 | RFQ-NEOM-2026-092 - Infrastruc | Source: None
+  2026-02-10 14:38:45.845136 | TND-2026-00005 | 13 Days Left: See How Zoho CRM | Source: None
+  2026-02-10 14:38:28.384751 | TND-2026-00004 | 12 Days Left to Optimize Your  | Source: None
+  2026-02-10 14:38:15.921278 | TND-2026-00003 | Meet the first AI Agents with  | Source: None
+  2026-02-10 12:56:43.263415 | TND-2026-00002 | ITT-2026-RIYADH-MEP-Package -  | Source: None
+  2026-02-10 12:31:50.220978 | TND-2026-00001 | RFQ-2026-NEOM-MEP-Package | Source: None
+
+--- Latest 20 Emails in DB ---
+  [M] 2026-02-24 06:11:41+05:00 | Try Codex for free... | Tender: None
+  [M] 2026-02-24 03:13:40+05:00 | Tomorrow: The Best Mobile Apps Built in ... | Tender: None

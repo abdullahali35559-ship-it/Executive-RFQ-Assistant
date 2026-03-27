@@ -1,0 +1,16 @@
+{
+  "token": "ya29.a0Aa7MYipgclA_6Gr8YzjNMOrPTzWeQ-BZRgpSOgwGjw7caD9SdvPbo8t3y1iVjhgXYJk4Eqvq0at5hLrwGnVahtbNR0wmCXwtD4Od3a0nPn3r3k7whbc66c0qunbWtvD74TtJn-YVeYRtrJL7ph7n8_jA1w9GlqhRdOydEF2ucli3OK6yhU_k_LN31xyBeoz-x0JPnzwaCgYKAYcSARMSFQHGX2MiWcVXztzrns2EDtmKnTMLQA0206",
+  "refresh_token": "1//03ap5iozHApVlCgYIARAAGAMSNwF-L9IrMiCam2oHDFowEVUc9FILnas6sr9KpoguVQsDKNQ0zcdu1_iIof9moiAv0m9QMjxAYRM",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "client_id": "900297742807-ujkl81584a0pc30ko1c61b1c04eo6cs5.apps.googleusercontent.com",
+  "client_secret": "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",
+  "scopes": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.send",
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ]
+}

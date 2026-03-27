@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFQ Agent - Settings</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/components.css">
+
+    <style>
+        .layout {
+            display: flex;
+            min-height: 100vh;
+            background: var(--bg-light);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 200px;
+            margin-top: 64px;
+            padding: var(--space-8);
+        }
+
+        .page-header {
+            margin-bottom: var(--space-8);
+        }
+
+        .page-title {
+            font-size: var(--text-4xl);
+            font-weight: var(--font-bold);
+            color: var(--text-primary);
+            margin-bottom: var(--space-2);
+        }
+
+        .page-subtitle {
+            font-size: var(--text-lg);
+            color: var(--text-muted);
+        }
+
+        .settings-section {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+        }
+
+        .section-title {
+            font-size: var(--text-xl);
+            font-weight: var(--font-semibold);
+            margin-bottom: var(--space-4);
+            padding-bottom: var(--space-4);
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .oauth-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-4);
+            background: var(--bg-light);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-4);
+        }
+
+        .oauth-info {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .oauth-icon {
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-online-large {
+            width: 12px;
+            height: 12px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+        }
+
+        .status-offline-large {
+            width: 12px;
+            height: 12px;
+            background: var(--accent-red);
+            border-radius: 50%;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                RFQ Agent
+            </a>
+
+            <ul class="nav-links">
+                <li><a href="index.html" class="nav-link">Dashboard</a></li>
+                <li><a href="tenders.html" class="nav-link">Applications</a></li>
+                <li><a href="settings.html" class="nav-link active">Settings</a></li>
+            </ul>
+
+            <div class="flex items-center gap-4">
+                <span class="badge badge-success">
+                    <span class="status-indicator status-online"></span>
+                    System Online
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <ul class="sidebar-menu">
+                <li class="sidebar-item">
+                    <a href="index.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                        </svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="tenders.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Application Report
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="emails.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                            </path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        Emails
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="drafts.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        Draft Emails
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="documents.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        Documents
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="clients.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Clients
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="assistant.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        AI Assistant
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="settings.html" class="sidebar-link active">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                        Settings
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title">Settings</h1>
+                <p class="page-subtitle">Configure email providers</p>
+            </div>
+
+            <!-- Email Providers -->
+            <div class="settings-section">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display: inline-block; vertical-align: middle; margin-right: 8px; margin-top: -2px;">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    Email Providers
+                </h2>
+
+                <!-- Gmail -->
+                <div class="oauth-status">
+                    <div class="oauth-info">
+                        <div class="oauth-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <rect x="2" y="4" width="20" height="16" rx="3" fill="#fff" stroke="#E0E0E0"
+                                    stroke-width="1" />
+                                <path d="M2 7.5L12 14L22 7.5" stroke="#EA4335" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <path d="M2 7.5L8.5 12" stroke="#4285F4" stroke-width="2" stroke-linecap="round" />
+                                <path d="M22 7.5L15.5 12" stroke="#34A853" stroke-width="2" stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600;">Gmail</div>
+                            <div style="font-size: 0.875rem; color: var(--text-muted);">Email integration</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div class="status-offline-large" id="gmailStatus"></div>
+                        <button class="btn btn-primary btn-sm" onclick="configureGmail()">Configure</button>
+                    </div>
+                </div>
+
+                <!-- Outlook -->
+                <div class="oauth-status">
+                    <div class="oauth-info">
+                        <div class="oauth-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <rect x="2" y="4" width="20" height="16" rx="3" fill="#0078D4" />
+                                <path d="M2 8l10 6l10-6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <rect x="6" y="8" width="5" height="8" rx="1" fill="#fff" opacity="0.3" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600;">Outlook</div>
+                            <div style="font-size: 0.875rem; color: var(--text-muted);">Email integration</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div class="status-online-large" id="outlookStatus"></div>
+                        <button class="btn btn-secondary btn-sm" onclick="viewOutlookSettings()">View Settings</button>
+                    </div>
+                </div>
+            </div>
+
+
+        </main>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="js/api.js"></script>
+    <script>
+        const API_BASE = window.RFQAgentAPI.baseURL;
+
+        async function configureGmail() {
+            console.log('[Settings] Opening Gmail OAuth login flow...');
+            try {
+                const response = await fetch(API_BASE + '/api/gmail/oauth/login');
+                const data = await response.json();
+                if (data.auth_url) {
+                    window.open(data.auth_url, '_blank');
+                } else {
+                    window.RFQAgentAPI.showToast('Could not get authentication URL', 'error');
+                }
+            } catch (error) {
+                console.error('[Settings] Gmail OAuth Error:', error);
+                window.RFQAgentAPI.showToast('API Connection Error', 'error');
+            }
+        }
+
+        async function viewOutlookSettings() {
+            console.log('[Settings] Opening Outlook OAuth login flow...');
+            try {
+                const response = await fetch(API_BASE + '/api/oauth/login');
+                const data = await response.json();
+                if (data.auth_url) {
+                    window.open(data.auth_url, '_blank');
+                } else {
+                    window.RFQAgentAPI.showToast('Could not get authentication URL', 'error');
+                }
+            } catch (error) {
+                console.error('[Settings] Outlook OAuth Error:', error);
+                window.RFQAgentAPI.showToast('API Connection Error', 'error');
+            }
+        }
+
+        // Load OAuth status on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('[Settings] Settings page loaded, checking OAuth status...');
+
+            // ===== CHECK OUTLOOK STATUS =====
+            try {
+                const outlookStatus = await window.RFQAgentAPI.getOAuthStatus();
+                console.log('[Settings] Outlook OAuth Status:', outlookStatus);
+
+                const outlookStatusDot = document.getElementById('outlookStatus');
+                const outlookBtn = document.querySelector('button[onclick="viewOutlookSettings()"]');
+
+                if (outlookStatus.status === 'connected') {
+                    outlookStatusDot.className = 'status-online-large';
+                    if (outlookBtn) {
+                        outlookBtn.textContent = 'Connected';
+                        outlookBtn.className = 'btn btn-secondary btn-sm';
+                    }
+                } else if (outlookStatus.status === 'unauthorized') {
+                    outlookStatusDot.className = 'status-offline-large';
+                    outlookStatusDot.title = 'Token expired. Please reconnect.';
+                    if (outlookBtn) {
+                        outlookBtn.textContent = 'Reconnect';
+                        outlookBtn.className = 'btn btn-primary btn-sm';
+                    }
+                } else {
+                    outlookStatusDot.className = 'status-offline-large';
+                    if (outlookBtn) {
+                        outlookBtn.textContent = 'Connect';
+                        outlookBtn.className = 'btn btn-primary btn-sm';
+                    }
+                }
+            } catch (error) {
+                console.error('[Settings] Could not fetch Outlook OAuth status:', error);
+            }
+
+            // ===== CHECK GMAIL STATUS =====
+            try {
+                const gmailResponse = await fetch(API_BASE + '/api/gmail/oauth/status');
+                const gmailStatus = await gmailResponse.json();
+                console.log('[Settings] Gmail OAuth Status:', gmailStatus);
+
+                const gmailStatusDot = document.getElementById('gmailStatus');
+                const gmailBtn = document.querySelector('button[onclick="configureGmail()"]');
+
+                // Gmail API returns {authenticated: true/false} format
+                if (gmailStatus.authenticated === true || gmailStatus.status === 'connected') {
+                    gmailStatusDot.className = 'status-online-large';
+                    if (gmailBtn) {
+                        gmailBtn.textContent = 'Connected';
+                        gmailBtn.className = 'btn btn-secondary btn-sm';
+                    }
+                } else {
+                    gmailStatusDot.className = 'status-offline-large';
+                    if (gmailBtn) {
+                        gmailBtn.textContent = 'Connect';
+                        gmailBtn.className = 'btn btn-primary btn-sm';
+                    }
+                }
+            } catch (error) {
+                console.error('[Settings] Could not fetch Gmail OAuth status:', error);
+            }
+        });
+    </script>
+</body>
+
+</html>

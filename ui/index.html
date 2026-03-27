@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFQ Agent - Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/components.css">
+
+    <style>
+        .layout {
+            display: flex;
+            min-height: 100vh;
+            background: var(--bg-light);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 200px;
+            margin-top: 64px;
+            padding: var(--space-8);
+        }
+
+        .page-header {
+            margin-bottom: var(--space-8);
+        }
+
+        .page-title {
+            font-size: var(--text-4xl);
+            font-weight: var(--font-bold);
+            color: var(--text-primary);
+            margin-bottom: var(--space-2);
+        }
+
+        .page-subtitle {
+            font-size: var(--text-lg);
+            color: var(--text-muted);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-6);
+            margin-bottom: var(--space-8);
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: var(--space-6);
+            margin-bottom: var(--space-8);
+        }
+
+        .action-card {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            cursor: pointer;
+            transition: all var(--transition-base);
+        }
+
+        .action-card:hover {
+            border-color: var(--primary-orange);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .action-icon {
+            width: 48px;
+            height: 48px;
+            background: #FFF4F0;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .action-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--primary-orange);
+        }
+
+        .action-content h3 {
+            font-size: var(--text-lg);
+            font-weight: var(--font-semibold);
+            margin-bottom: var(--space-1);
+        }
+
+        .action-content p {
+            font-size: var(--text-sm);
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .recent-activity {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+        }
+
+        .activity-item {
+            display: flex;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon-wrapper {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-light);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-weight: var(--font-medium);
+            color: var(--text-primary);
+            margin-bottom: var(--space-1);
+        }
+
+        .activity-meta {
+            font-size: var(--text-sm);
+            color: var(--text-muted);
+        }
+
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+
+            .stats-grid,
+            .quick-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                RFQ Agent
+            </a>
+
+            <ul class="nav-links">
+                <li><a href="index.html" class="nav-link active">Dashboard</a></li>
+                <li><a href="tenders.html" class="nav-link">Applications</a></li>
+                <li><a href="settings.html" class="nav-link">Settings</a></li>
+            </ul>
+
+            <div class="flex items-center gap-4">
+                <span class="badge badge-success">
+                    <span class="status-indicator status-online"></span>
+                    System Online
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <ul class="sidebar-menu">
+                <li class="sidebar-item">
+                    <a href="index.html" class="sidebar-link active">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                        </svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="tenders.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Application Report
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="emails.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                            </path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        Emails
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="drafts.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        Draft Emails
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="documents.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        Documents
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="clients.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Clients
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="assistant.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        AI Assistant
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="settings.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                        Settings
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <p class="page-subtitle">Welcome to RFQ Agent - Intelligent Tender Management System</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Active Applications</div>
+                    <div class="stat-value" id="activeTenders">0</div>
+                    <div class="stat-change positive" id="activeTendersStatus">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                            style="margin-right: 2px;">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                        Up to date
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Total Emails</div>
+                    <div class="stat-value" id="unreadEmails">0</div>
+                    <div class="stat-change neutral" id="unreadEmailsStatus">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        Checking...
+                    </div>
+                </div>
+
+                <div class="stat-card" onclick="window.location.href='drafts.html'" style="cursor: pointer;">
+                    <div class="stat-label">Pending RFIs</div>
+                    <div class="stat-value" id="pendingRFIs">0</div>
+                    <div class="stat-change">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                            </path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        Draft emails
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Total Clients</div>
+                    <div class="stat-value" id="totalClients">0</div>
+                    <div class="stat-change positive">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                            style="margin-right: 2px;">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        Connected
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <div class="action-card" onclick="processEmails()">
+                    <div class="action-icon">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path
+                                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div class="action-content">
+                        <h3>Process Emails</h3>
+                        <p>Check for new RFQ emails and process attachments</p>
+                    </div>
+                </div>
+
+                <div class="action-card" onclick="viewTenders()">
+                    <div class="action-icon">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path
+                                d="M9 12h6M9 16h6M7 8h10M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div class="action-content">
+                        <h3>View Application Report</h3>
+                        <p>Browse and manage all processed applications</p>
+                    </div>
+                </div>
+
+                <div class="action-card" onclick="checkSystem()">
+                    <div class="action-icon">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div class="action-content">
+                        <h3>System Status</h3>
+                        <p>Check database, and email connections</p>
+                    </div>
+                </div>
+
+                <div class="action-card" onclick="openSettings()">
+                    <div class="action-icon">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </div>
+                    <div class="action-content">
+                        <h3>Settings</h3>
+                        <p>Configure email providers and system settings</p>
+                    </div>
+                </div>
+
+            <!-- Agent Progress Panel (Hidden by default) -->
+            <div id="progressPanel" class="recent-activity" style="display: none; margin-bottom: var(--space-8); border-color: var(--primary-orange); background: #FFF9F6;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="card-title" style="display: flex; align-items: center; gap: 8px; color: var(--primary-orange);">
+                        <div class="spinner-small"></div>
+                        <span id="progressTitleText">Agent Processing in Progress...</span>
+                    </h2>
+                    <span id="progressPercent" style="font-weight: 700; color: var(--primary-orange);">0%</span>
+                </div>
+                <div style="padding: 0 var(--space-6) var(--space-6);">
+                    <div class="progress-bar-container" style="height: 10px; background: #EEE; border-radius: 5px; overflow: hidden; margin-bottom: 12px;">
+                        <div id="progressBar" style="height: 100%; width: 0%; background: var(--primary-orange); transition: width 0.5s ease;"></div>
+                    </div>
+                    <div id="progressStatus" style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">Initializing...</div>
+                    <div id="progressLogs" style="margin-top: 12px; max-height: 120px; overflow-y: auto; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6;">
+                        <!-- Logs will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Summary Widget -->
+            <div class="recent-activity">
+                <div class="card-header" style="margin-bottom:0;">
+                    <div>
+                        <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
+                            <svg width="18" height="18" fill="none" stroke="var(--primary-orange)" stroke-width="2"
+                                viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            Processing Session Summary
+                        </h2>
+                        <p style="font-size:0.8rem;color:var(--text-muted);margin:2px 0 0;">View all emails &amp;
+                            tenders processed within a time window</p>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px;">
+                    <button class="btn btn-secondary btn-sm" onclick="applyPreset('today')" id="preset-today">Today
+                        (9AM-5PM)</button>
+                    <button class="btn btn-secondary btn-sm" onclick="applyPreset('8h')" id="preset-8h">Last 8
+                        Hours</button>
+                    <button class="btn btn-secondary btn-sm" onclick="applyPreset('24h')" id="preset-24h">Last 24
+                        Hours</button>
+                    <button class="btn btn-secondary btn-sm" onclick="applyPreset('week')" id="preset-week">This
+                        Week</button>
+                </div>
+                <div
+                    style="background:var(--bg-light);border-radius:var(--radius-md);padding:12px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;border:1px solid var(--border-light);">
+                    <div>
+                        <label
+                            style="font-size:0.73rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">FROM</label>
+                        <input type="datetime-local" id="sessionFrom" class="form-input"
+                            style="padding:6px 10px;font-size:0.83rem;width:auto;">
+                    </div>
+                    <div>
+                        <label
+                            style="font-size:0.73rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">TO</label>
+                        <input type="datetime-local" id="sessionTo" class="form-input"
+                            style="padding:6px 10px;font-size:0.83rem;width:auto;">
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="loadSessionSummary()"
+                        style="height:36px;">Search</button>
+                </div>
+                <div id="sessionResults">
+                    <div style="text-align:center;padding:2rem;color:var(--text-muted);">
+                        <p style="font-size:0.88rem;">Select a time range or click a quick button above</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="js/api.js"></script>
+    <script>
+        function showToast(message, type = 'info') {
+            let container = document.querySelector('.toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            let icon = '';
+            if (type === 'success') icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+            else if (type === 'error') icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+            else icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+
+            toast.innerHTML = `
+                ${icon}
+                <div class="toast-message">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'toastFadeOut 0.3s ease-in forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        async function checkSystem() {
+            try {
+                const status = await window.RFQAgentAPI.getSystemStatus();
+                if (status.success) {
+                    showToast('System is Online', 'success');
+                } else {
+                    showToast('System Error', 'error');
+                }
+            } catch (error) {
+                showToast('System Offline or Connection Error', 'error');
+            }
+        }
+
+        // Initialize API client
+    </script>
+    <script src="js/dashboard.js"></script>
+</body>
+
+</html>

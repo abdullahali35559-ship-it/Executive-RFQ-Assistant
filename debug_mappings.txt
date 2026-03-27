@@ -1,0 +1,13 @@
+=== TENDER TO EMAIL MAPPING ===
+
+Tender: TND-2026-00020 | Project: Request for calculation
+  Emails: []
+  Docs: ['08C-211-21SP-EE-0011.pdf', '08C-211-21SP-EE-0012.pdf', '08C-211-21SP-EE-0013.pdf']
+
+Tender: TND-2026-00021 | Project: For calculation
+  Emails: [(222, 'For calculation')]
+  Docs: ['IT Project Management Spring-25.pdf']
+
+Tender: TND-2026-00022 | Project: Request for calculation
+  Emails: [(225, 'Request for calculation')]
+  Docs: ['08C-211-21SP-EE-0011.pdf', '08C-211-21SP-EE-0012.pdf', '08C-211-21SP-EE-0013.pdf']
