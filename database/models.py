@@ -103,7 +103,7 @@ class Email(Base):
     __tablename__ = 'emails'
     
     id = Column(Integer, primary_key=True)
-    thread_id = Column(String(50)) # Link to Thread.thread_id
+    thread_id = Column(String(50), index=True) # Link to Thread.thread_id
     email_id = Column(String(255), unique=True)
     subject = Column(Text)
     sender = Column(String(255))
@@ -127,7 +127,7 @@ class Attachment(Base):
     __tablename__ = 'attachments'
     
     id = Column(Integer, primary_key=True)
-    thread_id = Column(String(50))
+    thread_id = Column(String(50), index=True)
     category = Column(String(100)) # e.g. "01_Instructions", "02_Scope_of_Work"
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
@@ -149,7 +149,7 @@ class DraftReply(Base):
     __tablename__ = 'draft_replies'
     
     id = Column(Integer, primary_key=True)
-    thread_id = Column(String(50))
+    thread_id = Column(String(50), index=True)
     draft_type = Column(String(50))  # 'REPLY', 'CLARIFICATION', 'ACKNOWLEDGMENT'
     
     # Email details
