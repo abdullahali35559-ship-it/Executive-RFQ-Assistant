@@ -96,8 +96,9 @@ class GmailAPIFetcher:
         Returns list of email dictionaries compatible with EmailFetcher interface
         """
         try:
-            # Query for unread emails
-            query = 'is:unread in:inbox'
+            # Ultra-Strict query for Primary Inbox Only (exclude categories)
+            query = 'label:unread label:INBOX -category:promotions -category:social -category:updates -category:forums'
+            print(f"DEBUG: Searching Gmail with query: '{query}'")
             
             # Search emails
             results = self.service.users().messages().list(
@@ -109,10 +110,9 @@ class GmailAPIFetcher:
             messages = results.get('messages', [])
             
             if not messages:
-                print(" No emails found")
                 return []
             
-            print(f" Found {len(messages)} email(s)")
+            print(f" Found {len(messages)} unread email(s) in Primary Inbox")
             
             # Fetch full email data
             emails = []
@@ -125,6 +125,46 @@ class GmailAPIFetcher:
         
         except Exception as e:
             print(f"[X] Error fetching emails: {e}")
+            return []
+
+    def mark_as_read(self, email_id: str) -> bool:
+        """Mark an email as read by removing the UNREAD label"""
+        try:
+            # Strip prefix if present (e.g. 'gmail_12345' -> '12345')
+            raw_id = email_id.replace('gmail_', '')
+            print(f"  [GMAIL] Attempting to mark read for ID: {raw_id}")
+            
+            self.service.users().messages().modify(
+                userId='me',
+                id=raw_id,
+                body={
+                    'removeLabelIds': ['UNREAD']
+                }
+            ).execute()
+            print(f"  [+] SUCCESS: Marked as read in Gmail: {raw_id}")
+            return True
+        except Exception as e:
+            print(f"  [!] FAILED: Could not mark {email_id} as read. Error: {e}")
+            return False
+
+    def fetch_sent_emails(self, limit: int = 10) -> List[Dict]:
+        """Fetch recently sent emails to learn writing style"""
+        try:
+            results = self.service.users().messages().list(
+                userId='me',
+                q='label:SENT',
+                maxResults=limit
+            ).execute()
+            
+            messages = results.get('messages', [])
+            emails = []
+            for msg in messages:
+                email_data = self._fetch_email_details(msg['id'])
+                if email_data:
+                    emails.append(email_data)
+            return emails
+        except Exception as e:
+            print(f"[X] Error fetching sent emails: {e}")
             return []
     
     def _fetch_email_details(self, message_id: str) -> Optional[Dict]:
@@ -149,10 +189,15 @@ class GmailAPIFetcher:
             # Extract attachments
             attachments = self._extract_attachments(message_id, message['payload'])
             
+            # Standardize sender to only email address
+            from email.utils import parseaddr
+            _, sender_email = parseaddr(from_addr)
+            
             return {
                 'email_id': message_id,
                 'subject': subject,
-                'sender': from_addr,
+                'sender': sender_email,
+                'sender_name': from_addr,
                 'date': date_str,
                 'body': body,
                 'attachments': attachments
@@ -163,9 +208,12 @@ class GmailAPIFetcher:
             return None
     
     def move_to_processed(self, email_data: Dict) -> bool:
-        """Move email to processed label"""
+        """Move email to processed label and mark as read"""
         try:
             message_id = email_data['email_id']
+            # Remove provider prefix if present (e.g., 'gmail_12345' -> '12345')
+            if '_' in message_id:
+                message_id = message_id.split('_')[-1]
             
             # Get or create "RFQ_Processed" label
             label_id = self._get_or_create_label('RFQ_Processed')
@@ -177,9 +225,10 @@ class GmailAPIFetcher:
                     id=message_id,
                     body={'removeLabelIds': ['UNREAD']}
                 ).execute()
+                print(f"[OK] Email marked as read (Label not found)")
                 return True
             
-            # Add label and remove from inbox
+            # Add label, remove from inbox, and remove UNREAD
             self.service.users().messages().modify(
                 userId='me',
                 id=message_id,
@@ -189,12 +238,42 @@ class GmailAPIFetcher:
                 }
             ).execute()
             
-            print(f"[OK] Email moved to processed label")
+            print(f"[OK] Email moved to processed label and marked as read")
             return True
         
         except Exception as e:
             print(f"Warning: Error moving email {email_data.get('email_id')}: {e}")
             return False
+
+    def _get_or_create_label(self, label_name: str) -> Optional[str]:
+        """Get label ID or create if doesn't exist"""
+        try:
+            # List all labels
+            results = self.service.users().labels().list(userId='me').execute()
+            labels = results.get('labels', [])
+            
+            # Check if label exists
+            for label in labels:
+                if label['name'] == label_name:
+                    return label['id']
+            
+            # Create label
+            label_object = {
+                'name': label_name,
+                'labelListVisibility': 'labelShow',
+                'messageListVisibility': 'show'
+            }
+            
+            created_label = self.service.users().labels().create(
+                userId='me',
+                body=label_object
+            ).execute()
+            
+            return created_label['id']
+        
+        except Exception as e:
+            print(f"Warning: Error with labels: {e}")
+            return None
 
     def mark_as_read(self, message_id: str) -> bool:
         """Mark email as read by removing UNREAD label"""
@@ -231,19 +310,17 @@ class GmailAPIFetcher:
                 body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
         
         return body
-    
+
     def _extract_attachments(self, message_id: str, payload: Dict) -> List[Dict]:
-        """Extract attachments from email"""
+        """Extract attachments from email recursively"""
         attachments = []
         
-        if 'parts' not in payload:
-            return attachments
-        
-        for part in payload['parts']:
-            if part.get('filename'):
-                attachment_id = part['body'].get('attachmentId')
+        def _get_parts_with_attachments(parts):
+            for part in parts:
+                filename = part.get('filename')
+                attachment_id = part.get('body', {}).get('attachmentId')
                 
-                if attachment_id:
+                if filename and attachment_id:
                     try:
                         attachment = self.service.users().messages().attachments().get(
                             userId='me',
@@ -254,80 +331,22 @@ class GmailAPIFetcher:
                         data = base64.urlsafe_b64decode(attachment['data'])
                         
                         attachments.append({
-                            'filename': part['filename'],
+                            'filename': filename,
                             'content': data,
                             'content_type': part.get('mimeType', 'application/octet-stream'),
                             'size': attachment.get('size', 0)
                         })
-                    
                     except Exception as e:
-                        print(f"Warning: Could not download attachment: {e}")
+                        print(f"Warning: Could not download attachment {filename}: {e}")
+                
+                # Recursive call for nested parts
+                if 'parts' in part:
+                    _get_parts_with_attachments(part['parts'])
+ 
+        if 'parts' in payload:
+            _get_parts_with_attachments(payload['parts'])
         
         return attachments
-    
-    def move_to_processed(self, email_data: Dict) -> bool:
-        """Move email to processed label"""
-        try:
-            message_id = email_data['email_id']
-            
-            # Get or create "RFQ_Processed" label
-            label_id = self._get_or_create_label('RFQ_Processed')
-            
-            if not label_id:
-                # Fallback: just mark as read
-                self.service.users().messages().modify(
-                    userId='me',
-                    id=message_id,
-                    body={'removeLabelIds': ['UNREAD']}
-                ).execute()
-                return True
-            
-            # Add label and remove from inbox
-            self.service.users().messages().modify(
-                userId='me',
-                id=message_id,
-                body={
-                    'addLabelIds': [label_id],
-                    'removeLabelIds': ['INBOX', 'UNREAD']
-                }
-            ).execute()
-            
-            print(f"[OK] Email moved to processed label")
-            return True
-        
-        except Exception as e:
-            print(f"Warning: Error moving email: {e}")
-            return False
-    
-    def _get_or_create_label(self, label_name: str) -> Optional[str]:
-        """Get label ID or create if doesn't exist"""
-        try:
-            # List all labels
-            results = self.service.users().labels().list(userId='me').execute()
-            labels = results.get('labels', [])
-            
-            # Check if label exists
-            for label in labels:
-                if label['name'] == label_name:
-                    return label['id']
-            
-            # Create label
-            label_object = {
-                'name': label_name,
-                'labelListVisibility': 'labelShow',
-                'messageListVisibility': 'show'
-            }
-            
-            created_label = self.service.users().labels().create(
-                userId='me',
-                body=label_object
-            ).execute()
-            
-            return created_label['id']
-        
-        except Exception as e:
-            print(f"Warning: Error with labels: {e}")
-            return None
 
     # ==========================================
     # DRAFT EMAIL MANAGEMENT METHODS
@@ -336,11 +355,8 @@ class GmailAPIFetcher:
     def create_draft(self, to: str, subject: str, body: str, in_reply_to: str = None, attachments: List[Dict] = None) -> Dict:
         """Create a draft email in Gmail with optional attachments"""
         try:
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.application import MIMEApplication
-            import base64
-
+            from email.utils import parseaddr
+            
             # Create message container
             if attachments:
                 message = MIMEMultipart()
@@ -486,6 +502,22 @@ class GmailAPIFetcher:
             }
         except Exception as e:
             print(f"[X] Error sending Gmail draft: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def send_immediate_email(self, to: str, subject: str, body: str) -> Dict:
+        """Send an email directly without creating a draft first"""
+        try:
+            message = MIMEText(body)
+            message['to'] = to
+            message['subject'] = subject
+            
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+            create_body = {'raw': raw_message}
+            
+            result = self.service.users().messages().send(userId='me', body=create_body).execute()
+            return {'success': True, 'message_id': result['id']}
+        except Exception as e:
+            print(f"[X] Error sending immediate email: {e}")
             return {'success': False, 'error': str(e)}
 
     def delete_draft(self, draft_id: str) -> Dict:

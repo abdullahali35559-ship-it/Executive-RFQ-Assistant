@@ -1,0 +1,12 @@
+INFO:     Started server process [2296]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('0.0.0.0', 8000): [winerror 10048] only one usage of each socket address (protocol/network address/port) is normally permitted
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+============================================================
+DEBUG: OAuth Configuration
+CLIENT_ID: 22d35d3b-f2a4-4111-a1b1-1a49b133e153
+CLIENT_SECRET: **********
+REDIRECT_URI: http://localhost:8000/oauth/callback
+============================================================

@@ -1,26 +1,53 @@
+import sys
+import os
+
+# Initialize sys.path to include the project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from dotenv import load_dotenv
 # Load .env FIRST before any other imports
 load_dotenv()
 
-import os
 # Allow OAuth scope changes (Google sometimes adds openid/email automatically)
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import asyncio
+import time
+
+# Performance Caching
+calendar_cache = {} # {key: (timestamp, data)}
+CACHE_TTL = 300 # 5 minutes
+
 from typing import Dict, Optional, List
 from sqlalchemy import desc, func, or_, text
-from database.models import Client, Project, Tender, Email, Document, DraftEmail, RFIDraft, FileLink, AgentHandover, AuditLog
-from database.connection import SessionLocal
+from database.models import (
+    Contact, Topic, Thread, Email, Attachment, DraftReply, 
+    AuditLog, AssistantChat, AssistantConversation, Tag,
+    FollowupTask
+)
+from config.database import SessionLocal, init_db
 import msal
 import json
 from pathlib import Path
 import secrets
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# --- Auth Imports ---
+from fastapi.security import OAuth2PasswordRequestForm
+from auth.user_manager import UserManager
+from auth.session_manager import SessionManager
+from auth.security import get_password_hash, verify_password, create_access_token
+from auth.dependencies import get_current_user, oauth2_scheme
+# --------------------
 
 # Pydantic models for Assistant
 class CreateConversationRequest(BaseModel):
@@ -30,6 +57,23 @@ class AssistantChatRequest(BaseModel):
     message: str
     context: Optional[str] = None
     conversation_id: Optional[int] = None
+
+class CreateEventRequest(BaseModel):
+    title: str
+    start_time: str
+    end_time: str
+    description: Optional[str] = ""
+    attendees: Optional[List[str]] = []
+    provider: str = 'google'
+    thread_id: Optional[str] = None
+
+class TagCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#6366f1"
+
+class TagUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
 
 from models.pixtral_client import PixtralClient
 import fitz # PyMuPDF
@@ -42,17 +86,28 @@ from config.prompts import (
 )
 
 ASSISTANT_SYSTEM_PROMPT = """
-You are the AI Assistant for the RFQ Agent platform.
-Your goal is to help users manage their tenders, RFQs, and business documents.
-You can provide general assistance, summarize documents, and answer business queries.
+You are the AI Assistant for the General Email Reply platform.
+Your goal is to help users manage their business correspondence, categorize threads, and draft professional replies.
 
 IMPORTANT: 
-- If asked "Who are you?" or about your identity, respond that you are the "RFQ Agent AI Assistant". 
+- If asked "Who are you?" or about your identity, respond that you are the "General Email Assistant AI". 
 - NEVER mention "Pixtral", "Mistral", or any specific LLM model name. 
 - Maintain a professional, helpful, and business-focused tone.
 """
 
-app = FastAPI(title="RFQ Agent API")
+from contextlib import asynccontextmanager
+from agents.executive.assistant import ExecutiveAssistant
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database tables on startup
+    print("Initializing database...")
+    init_db()
+    print("Database initialized.")
+    yield
+    # Shutdown logic can go here
+
+app = FastAPI(title="Email Assistant API", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -103,6 +158,204 @@ def root_redirect():
     """Redirect root to dashboard"""
     return FileResponse("ui/index.html")
 
+# ============================================
+# AUTHENTICATION ROUTES
+# ============================================
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    role: Optional[str] = "user"
+
+@app.post("/api/auth/register")
+async def register(user_data: UserRegister):
+    """Register a new user (JSON-based)"""
+    um = UserManager()
+    if um.get_user_by_username(user_data.username):
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    new_user = {
+        "username": user_data.username,
+        "password_hash": get_password_hash(user_data.password),
+        "email": user_data.email,
+        "role": user_data.role,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    if um.add_user(new_user):
+        return {"success": True, "message": "User registered successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to register user")
+
+@app.post("/api/auth/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Authenticate and get a JWT token"""
+    um = UserManager()
+    user = um.get_user_by_username(form_data.username)
+    
+    if not user or not verify_password(form_data.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(data={"sub": user["username"]})
+    
+    # Store session
+    sm = SessionManager()
+    from auth.security import ACCESS_TOKEN_EXPIRE_MINUTES
+    import time
+    expires_at = time.time() + (ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    sm.add_session(user["username"], access_token, expires_at)
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/auth/logout")
+async def logout(current_user: dict = Depends(get_current_user), token: str = Depends(oauth2_scheme)):
+    """Revoke the current session token"""
+    sm = SessionManager()
+    sm.revoke_session(token)
+    return {"success": True, "message": "Logged out successfully"}
+
+# ============================================
+# TAGS & CATEGORIES API
+# ============================================
+
+@app.get("/api/tags")
+async def get_tags(current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        tags = db.query(Tag).all()
+        return {
+            "success": True,
+            "data": [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
+        }
+    finally:
+        db.close()
+
+@app.post("/api/tags")
+async def create_tag(tag_data: TagCreate, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        # Check if already exists
+        existing = db.query(Tag).filter(Tag.name == tag_data.name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Tag already exists")
+        
+        new_tag = Tag(name=tag_data.name, color=tag_data.color)
+        db.add(new_tag)
+        db.commit()
+        db.refresh(new_tag)
+        return {
+            "success": True,
+            "data": {"id": new_tag.id, "name": new_tag.name, "color": new_tag.color}
+        }
+    finally:
+        db.close()
+
+@app.delete("/api/tags/{tag_id}")
+async def delete_tag(tag_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        db.delete(tag)
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.post("/api/emails/{email_id}/tags/{tag_id}")
+async def add_tag_to_email(email_id: int, tag_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        email_obj = db.query(Email).filter(Email.id == email_id).first()
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not email_obj or not tag:
+            raise HTTPException(status_code=404, detail="Email or Tag not found")
+        
+        if tag not in email_obj.tags:
+            email_obj.tags.append(tag)
+            
+            # Sync to Thread (Topic)
+            if email_obj.thread_id:
+                thread = db.query(Thread).filter(Thread.thread_id == email_obj.thread_id).first()
+                if thread and tag not in thread.tags:
+                    thread.tags.append(tag)
+            
+            db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.delete("/api/emails/{email_id}/tags/{tag_id}")
+async def remove_tag_from_email(email_id: int, tag_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        email_obj = db.query(Email).filter(Email.id == email_id).first()
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not email_obj or not tag:
+            raise HTTPException(status_code=404, detail="Email or Tag not found")
+        
+        if tag in email_obj.tags:
+            email_obj.tags.remove(tag)
+            
+            # Sync removal from Thread (Topic)
+            if email_obj.thread_id:
+                thread = db.query(Thread).filter(Thread.thread_id == email_obj.thread_id).first()
+                if thread and tag in thread.tags:
+                    # Optional: only remove if no other emails in this thread have this tag
+                    # For now, keep it simple and remove it.
+                    thread.tags.remove(tag)
+            
+            db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.post("/api/threads/{thread_id}/tags/{tag_id}")
+async def add_tag_to_thread(thread_id: int, tag_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        thread = db.query(Thread).filter(Thread.id == thread_id).first()
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not thread or not tag:
+            raise HTTPException(status_code=404, detail="Thread or Tag not found")
+        if tag not in thread.tags:
+            thread.tags.append(tag)
+            db.commit()
+        return {"success": True, "message": f"Tag '{tag.name}' added to thread"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.delete("/api/threads/{thread_id}/tags/{tag_id}")
+async def remove_tag_from_thread(thread_id: int, tag_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        thread = db.query(Thread).filter(Thread.id == thread_id).first()
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not thread or not tag:
+            raise HTTPException(status_code=404, detail="Thread or Tag not found")
+        if tag in thread.tags:
+            thread.tags.remove(tag)
+            db.commit()
+        return {"success": True, "message": f"Tag '{tag.name}' removed from thread"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+# ============================================
+# OAUTH2 ROUTES (EXISTING)
+# ============================================
+
 @app.get("/api/oauth/login")
 def oauth_login():
     """Initiate OAuth2 login flow"""
@@ -114,9 +367,17 @@ def oauth_login():
     # Build MSAL app
     msal_app = get_msal_app()
     
+    # MSAL 1.28.0+ automatically manages OIDC scopes ('openid', 'profile', 'offline_access')
+    # Manually including them can cause 'ValueError: API does not accept frozenset...'
+    active_scopes = [
+        'https://graph.microsoft.com/Mail.ReadWrite',
+        'https://graph.microsoft.com/Mail.Send',
+        'https://graph.microsoft.com/Calendars.ReadWrite'
+    ]
+    
     # Get authorization URL
     auth_url = msal_app.get_authorization_request_url(
-        SCOPES,
+        active_scopes,
         state=state,
         redirect_uri=REDIRECT_URI
     )
@@ -335,6 +596,18 @@ def oauth_refresh():
     # Use MSAL to refresh
     msal_app = get_msal_app()
     
+    # Scopes (using full Graph URIs for clarity and avoiding reserved names)
+    # Must be a LIST. We OMIT 'openid', 'profile', 'offline_access' as MSAL handles them automatically.
+    SCOPES = [
+        'https://graph.microsoft.com/Mail.ReadWrite',
+        'https://graph.microsoft.com/Mail.Send',
+        'https://graph.microsoft.com/Calendars.ReadWrite'
+    ]
+
+    # Defense: ensure it's a list if imported by other modules
+    if not isinstance(SCOPES, list):
+        SCOPES = list(SCOPES)
+    
     result = msal_app.acquire_token_by_refresh_token(
         token_data['refresh_token'],
         scopes=SCOPES
@@ -396,8 +669,8 @@ async def gmail_oauth_login():
         # Generate authorization URL
         authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'
+            include_granted_scopes='false',
+            prompt='consent select_account'
         )
         
         # Store state
@@ -435,6 +708,8 @@ async def gmail_oauth_callback(code: str = None, state: str = None, error: str =
         flow.fetch_token(code=code)
         
         credentials = flow.credentials
+        
+        print(f"DEBUG: Scopes granted by Google: {credentials.scopes}")
         
         # Save tokens
         token_data = {
@@ -616,7 +891,7 @@ async def gmail_oauth_refresh():
 # ===========================================
 
 from database.connection import SessionLocal
-from database.models import DraftEmail, Email, Tender, Document
+from database.models import DraftReply as DraftEmail, Email, Thread as Tender, Attachment as Document, Contact
 from agents.rfq_agent.outlook_graph import OutlookGraphFetcher
 from agents.rfq_agent.gmail_api_client import GmailAPIFetcher
 from sqlalchemy import desc, text
@@ -629,8 +904,8 @@ class DraftEnhance(BaseModel):
     instructions: str
 
 class DraftCreate(BaseModel):
-    tender_id: Optional[str] = None
     recipient: str
+    thread_id: Optional[str] = None
     subject: str
     body: str
     draft_type: str = "RESPONSE"
@@ -639,7 +914,7 @@ class DraftCreate(BaseModel):
 
 
 @app.get("/api/drafts")
-async def get_drafts(tender_id: Optional[str] = None):
+async def get_drafts(tender_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get all draft emails, optionally filtered by tender_id"""
     db = SessionLocal()
     
@@ -660,7 +935,7 @@ async def get_drafts(tender_id: Optional[str] = None):
             "drafts": [
                 {
                     "id": d.id,
-                    "tender_id": d.tender_id,
+                    "thread_id": d.thread_id,
                     "draft_type": d.draft_type,
                     "recipient": d.recipient,
                     "subject": d.subject,
@@ -680,7 +955,7 @@ async def get_drafts(tender_id: Optional[str] = None):
         db.close()
 
 @app.get("/api/drafts/{draft_id}")
-async def get_draft(draft_id: int):
+async def get_draft(draft_id: int, current_user: dict = Depends(get_current_user)):
     """Get a specific draft by ID"""
     db = SessionLocal()
     
@@ -692,9 +967,9 @@ async def get_draft(draft_id: int):
         
         return {
             "success": True,
-            "draft": {
+            "data": {
                 "id": draft.id,
-                "tender_id": draft.tender_id,
+                "thread_id": draft.thread_id,
                 "draft_type": draft.draft_type,
                 "recipient": draft.recipient,
                 "subject": draft.subject,
@@ -714,18 +989,21 @@ async def get_draft(draft_id: int):
         db.close()
 
 @app.post("/api/drafts")
-async def create_draft(draft_data: DraftCreate):
+async def create_draft(draft_data: DraftCreate, current_user: dict = Depends(get_current_user)):
     """Create a new draft email"""
     db = SessionLocal()
     
     try:
         # Detect provider from tender source
         provider = 'outlook'  # Default
-        if draft_data.tender_id:
-            tender = db.query(Tender).filter(Tender.tender_id == draft_data.tender_id).first()
-            if tender and tender.source:
-                if 'gmail' in tender.source.lower():
+        # Optional: Link to thread
+        if draft_data.thread_id:
+            thread = db.query(Thread).filter(Thread.thread_id == draft_data.thread_id).first()
+            if thread and thread.source:
+                if 'gmail' in thread.source.lower():
                     provider = 'gmail'
+                elif 'outlook' in thread.source.lower():
+                    provider = 'outlook'
         
         # Create draft in the appropriate provider
         if provider == 'gmail':
@@ -752,7 +1030,7 @@ async def create_draft(draft_data: DraftCreate):
         
         # Save to database
         draft = DraftEmail(
-            tender_id=draft_data.tender_id,
+            thread_id=draft_data.thread_id,
             draft_type=draft_data.draft_type,
             recipient=draft_data.recipient,
             subject=draft_data.subject,
@@ -783,7 +1061,7 @@ async def create_draft(draft_data: DraftCreate):
         db.close()
 
 @app.put("/api/drafts/{draft_id}")
-async def update_draft(draft_id: int, draft_update: DraftUpdate):
+async def update_draft(draft_id: int, draft_update: DraftUpdate, current_user: dict = Depends(get_current_user)):
     """Update an existing draft email"""
     db = SessionLocal()
     
@@ -842,7 +1120,7 @@ async def update_draft(draft_id: int, draft_update: DraftUpdate):
         db.close()
 
 @app.post("/api/drafts/{draft_id}/send")
-async def send_draft(draft_id: int):
+async def send_draft(draft_id: int, current_user: dict = Depends(get_current_user)):
     """Send a draft email"""
     db = SessionLocal()
     
@@ -892,7 +1170,7 @@ async def send_draft(draft_id: int):
         db.close()
 
 @app.post("/api/drafts/{draft_id}/enhance")
-async def enhance_draft(draft_id: int, enhancement: DraftEnhance):
+async def enhance_draft(draft_id: int, enhancement: DraftEnhance, current_user: dict = Depends(get_current_user)):
     """Enhance a draft email using AI based on user instructions"""
     db = SessionLocal()
     try:
@@ -927,12 +1205,13 @@ async def enhance_draft(draft_id: int, enhancement: DraftEnhance):
         }
     except Exception as e:
         print(f"Error enhancing draft: {e}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
 @app.delete("/api/drafts/{draft_id}")
-async def delete_draft(draft_id: int):
+async def delete_draft(draft_id: int, current_user: dict = Depends(get_current_user)):
     """Delete a draft email"""
     db = SessionLocal()
     
@@ -972,7 +1251,7 @@ async def delete_draft(draft_id: int):
         db.close()
 
 @app.get("/api/session-summary")
-async def get_session_summary(from_time: str, to_time: str):
+async def get_session_summary(from_time: str, to_time: str, current_user: dict = Depends(get_current_user)):
     """Get emails processed within a given time window, with tender & document details."""
     db = SessionLocal()
     try:
@@ -992,29 +1271,28 @@ async def get_session_summary(from_time: str, to_time: str):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid datetime format. Use ISO format")
 
-        # Fetch emails processed in this window that are tenders
+        # Fetch emails processed in this window
         emails = db.query(Email).filter(
-            Email.is_tender == True,
             Email.processed == True,
             Email.created_at >= start,
             Email.created_at <= end
         ).order_by(Email.created_at.desc()).limit(100).all()
 
-        # For each email, get docs count and tender subject
+        # For each email, get attachment count and thread subject
         results = []
         for e in emails:
-            doc_count = db.query(func.count(Document.id)).filter(
-                Document.tender_id == e.tender_id
-            ).scalar() if e.tender_id else 0
+            att_count = db.query(func.count(Attachment.id)).filter(
+                Attachment.thread_id == e.thread_id
+            ).scalar() if e.thread_id else 0
 
             results.append({
                 "email_id": e.id,
                 "subject": e.subject,
                 "sender": e.sender,
-                "tender_id": e.tender_id,
+                "thread_id": e.thread_id,
                 "received_at": e.received_at.isoformat() if e.received_at else None,
                 "processed_at": e.created_at.isoformat() if e.created_at else None,
-                "doc_count": doc_count,
+                "att_count": att_count,
             })
 
         return {
@@ -1032,43 +1310,40 @@ async def get_session_summary(from_time: str, to_time: str):
         db.close()
 
 @app.get("/api/emails")
-async def get_emails(tender_id: Optional[str] = None, status: Optional[str] = None, include_all: bool = True):
+async def get_emails(thread_id: Optional[str] = None, status: Optional[str] = None, include_all: bool = True, current_user: dict = Depends(get_current_user)):
     """Get all emails, optionally filtered"""
     db = SessionLocal()
     
     try:
         query = db.query(Email)
         
-        if tender_id:
-            query = query.filter(Email.tender_id == tender_id)
+        if thread_id:
+            query = query.filter(Email.thread_id == thread_id)
         
-        # Default behavior: Show everything unless a specific status is requested
-        # (include_all is True by default now)
         if status:
             if status == "processed":
                 query = query.filter(Email.processed == True)
             elif status == "unprocessed":
                 query = query.filter(Email.processed == False)
-            elif status == "tender":
-                query = query.filter(Email.is_tender == True)
+            elif status == "actionable":
+                query = query.filter(Email.is_junk == False)
             elif status == "junk":
-                query = query.filter(Email.is_tender == False)
+                query = query.filter(Email.is_junk == True)
         
         emails = query.order_by(desc(Email.id)).all()
         
-        # Get active drafts to map them back to emails (like Gmail)
-        drafts = db.query(DraftEmail).filter(DraftEmail.status == 'DRAFT').all()
+        # Get active drafts
+        drafts = db.query(DraftReply).filter(DraftReply.status == 'DRAFT').all()
         draft_map = {d.in_reply_to_email_id: d.id for d in drafts if d.in_reply_to_email_id}
         
-        # Get document counts per tender_id
-        doc_counts = {}
-        tender_ids = [e.tender_id for e in emails if e.tender_id]
-        if tender_ids:
-            # Count documents for each unique tender_id
-            counts = db.query(Document.tender_id, func.count(Document.id)).filter(
-                Document.tender_id.in_(tender_ids)
-            ).group_by(Document.tender_id).all()
-            doc_counts = {tid: count for tid, count in counts}
+        # Get attachment counts
+        att_counts = {}
+        thread_ids = [e.thread_id for e in emails if e.thread_id]
+        if thread_ids:
+            counts = db.query(Attachment.thread_id, func.count(Attachment.id)).filter(
+                Attachment.thread_id.in_(thread_ids)
+            ).group_by(Attachment.thread_id).all()
+            att_counts = {tid: count for tid, count in counts}
 
         return {
             "success": True,
@@ -1077,17 +1352,19 @@ async def get_emails(tender_id: Optional[str] = None, status: Optional[str] = No
                 {
                     "id": e.id,
                     "email_id": e.email_id,
-                    "tender_id": e.tender_id,
+                    "thread_id": e.thread_id,
                     "subject": e.subject,
                     "sender": e.sender,
-                    "from": e.sender,  # Alias for frontend
-                    "date": e.received_at.isoformat() if e.received_at else None, # Alias for frontend
-                    "body": e.body[:200] if e.body else None,  # Preview only
+                    "from": e.sender,
+                    "date": e.received_at.isoformat() if e.received_at else None,
+                    "body": e.body[:200] if e.body else None,
                     "received_at": e.received_at.isoformat() if e.received_at else None,
-                    "is_tender": e.is_tender,
+                    "is_junk": e.is_junk,
                     "processed": e.processed,
-                    "attachments": doc_counts.get(e.tender_id, 0) if e.is_tender else 0,
-                    "status": "tender" if e.is_tender else "processed" if e.processed else "unprocessed",
+                    "attachments": att_counts.get(e.thread_id, 0),
+                    "tags": [{"id": t.id, "name": t.name, "color": t.color} for t in e.tags],
+                    "tags_suggested": e.tags_suggested or [],
+                    "status": "junk" if e.is_junk else "processed" if e.processed else "unprocessed",
                     "detection_confidence": e.detection_confidence,
                     "has_draft": e.email_id in draft_map,
                     "draft_id": draft_map.get(e.email_id)
@@ -1101,7 +1378,7 @@ async def get_emails(tender_id: Optional[str] = None, status: Optional[str] = No
         db.close()
 
 @app.get("/api/emails/{email_id}")
-async def get_email(email_id: int):
+async def get_email(email_id: int, current_user: dict = Depends(get_current_user)):
     """Get full details for a specific email"""
     db = SessionLocal()
     try:
@@ -1114,13 +1391,15 @@ async def get_email(email_id: int):
             "data": {
                 "id": email.id,
                 "email_id": email.email_id,
-                "tender_id": email.tender_id,
+                "thread_id": email.thread_id,
                 "subject": email.subject,
                 "sender": email.sender,
                 "body": email.body,
                 "received_at": email.received_at.isoformat() if email.received_at else None,
-                "is_tender": email.is_tender,
-                "processed": email.processed
+                "is_junk": email.is_junk,
+                "processed": email.processed,
+                "tags": [{"id": t.id, "name": t.name, "color": t.color} for t in email.tags],
+                "tags_suggested": email.tags_suggested or []
             }
         }
     except HTTPException:
@@ -1131,7 +1410,7 @@ async def get_email(email_id: int):
         db.close()
 
 @app.post("/api/emails/{email_id}/archive")
-async def archive_email(email_id: int):
+async def archive_email(email_id: int, current_user: dict = Depends(get_current_user)):
     """Mark an email as processed/archived"""
     db = SessionLocal()
     try:
@@ -1147,36 +1426,68 @@ async def archive_email(email_id: int):
     finally:
         db.close()
 
-@app.get("/api/documents/{doc_id}")
-async def get_document(doc_id: int):
-    """Get metadata for a specific document"""
+@app.post("/api/emails/{email_id}/confirm_tags")
+async def confirm_email_tags(email_id: int, current_user: dict = Depends(get_current_user)):
+    """Convert AI suggestions into active tags"""
     db = SessionLocal()
     try:
-        doc = db.query(Document).filter(Document.id == doc_id).first()
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
-        # Calculate view URL relative to /storage mount
-        # If path is ./storage/tenders/file.pdf, relative is tenders/file.pdf
-        rel_path = doc.file_path
-        if rel_path.startswith('./'):
-            rel_path = rel_path[2:]
-        if rel_path.startswith('storage/'):
-            rel_path = rel_path[len('storage/'):]
+        email = db.query(Email).filter(Email.id == email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
         
-        # Replace backslashes with forward slashes for URL
-        rel_path = rel_path.replace('\\', '/')
+        if not email.tags_suggested:
+            return {"success": True, "message": "No suggestions to confirm"}
+            
+        # Find existing tags that match suggestions
+        matching_tags = db.query(Tag).filter(Tag.name.in_(email.tags_suggested)).all()
+        
+        added_count = 0
+        for tag in matching_tags:
+            if tag not in email.tags:
+                email.tags.append(tag)
+                added_count += 1
+        
+        # Clear suggestions after confirmation
+        email.tags_suggested = []
+        db.commit()
+        
+        return {"success": True, "message": f"Applied {added_count} tags", "tags": [{"id": t.id, "name": t.name, "color": t.color} for t in email.tags]}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.get("/api/attachments/{att_id}")
+async def get_attachment(att_id: int, current_user: dict = Depends(get_current_user)):
+    """Get metadata for a specific attachment"""
+    db = SessionLocal()
+    try:
+        att = db.query(Attachment).filter(Attachment.id == att_id).first()
+        if not att:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        rel_path = att.file_path
+        view_url = ""
+        
+        if rel_path.startswith('URL:'):
+            view_url = rel_path.replace('URL:', '')
+        else:
+            if rel_path.startswith('./'): rel_path = rel_path[2:]
+            if rel_path.startswith('storage/'): rel_path = rel_path[len('storage/'):]
+            rel_path = rel_path.replace('\\', '/')
+            view_url = f"/storage/{rel_path}"
         
         return {
             "success": True,
             "data": {
-                "id": doc.id,
-                "filename": doc.filename,
-                "file_path": doc.file_path,
-                "view_url": f"/storage/{rel_path}",
-                "category": doc.category,
-                "tender_id": doc.tender_id,
-                "version": doc.version,
-                "uploaded_at": doc.uploaded_at.isoformat() if doc.uploaded_at else None
+                "id": att.id,
+                "filename": att.filename,
+                "file_path": att.file_path,
+                "view_url": view_url,
+                "doc_type": att.doc_type,
+                "thread_id": att.thread_id,
+                "summary": att.summary,
+                "uploaded_at": att.uploaded_at.isoformat() if att.uploaded_at else None
             }
         }
     except Exception as e:
@@ -1184,73 +1495,105 @@ async def get_document(doc_id: int):
     finally:
         db.close()
 
-@app.delete("/api/documents/{doc_id}")
-async def delete_document(doc_id: int):
-    """Delete a document from DB and storage"""
+@app.get("/api/attachments")
+async def list_all_attachments(current_user: dict = Depends(get_current_user)):
+    """List all attachments with thread and sender info for grouping"""
     db = SessionLocal()
     try:
-        doc = db.query(Document).filter(Document.id == doc_id).first()
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
+        # Join Attachment with Thread to get sender and subject info
+        results = db.query(Attachment, Thread).outerjoin(Thread, Attachment.thread_id == Thread.thread_id).order_by(desc(Attachment.uploaded_at)).all()
+        
+        data = []
+        for att, thread in results:
+            rel_path = att.file_path
+            view_url = ""
             
-        # Optional: Delete physical file
+            if rel_path.startswith('URL:'):
+                view_url = rel_path.replace('URL:', '')
+            else:
+                if rel_path.startswith('./'): rel_path = rel_path[2:]
+                if rel_path.startswith('storage/'): rel_path = rel_path[len('storage/'):]
+                rel_path = rel_path.replace('\\', '/')
+                view_url = f"/storage/{rel_path}"
+                
+            data.append({
+                "id": att.id,
+                "name": att.filename,
+                "filename": att.filename,
+                "file_path": att.file_path,  # Essential for frontend handleFileAction
+                "file_type": att.doc_type,
+                "type": att.doc_type,
+                "thread_id": att.thread_id,
+                "thread": att.thread_id,
+                "size": f"{round(att.file_size_bytes / 1024, 1)} KB" if att.file_size_bytes else "0 KB",
+                "received_at": att.uploaded_at.isoformat() if att.uploaded_at else None,
+                "sender_email": thread.source_email if thread else "Unknown",
+                "sender_name": thread.contact_name if thread else "Unknown",
+                "subject": thread.subject if thread else "No Subject",
+                "view_url": view_url,
+                "summary": att.summary,
+                "tags": [] 
+            })
+        return {
+            "success": True,
+            "count": len(data),
+            "data": data
+        }
+    except Exception as e:
+        print(f"Error listing attachments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.delete("/api/attachments/{att_id}")
+async def delete_attachment(att_id: int, current_user: dict = Depends(get_current_user)):
+    """Delete an attachment from DB and storage"""
+    db = SessionLocal()
+    try:
+        att = db.query(Attachment).filter(Attachment.id == att_id).first()
+        if not att:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+            
         try:
-            file_path = Path(doc.file_path)
-            if file_path.exists():
-                file_path.unlink()
-        except Exception as fe:
-            print(f"Warning: Could not delete physical file: {fe}")
+            file_path = Path(att.file_path)
+            if file_path.exists(): file_path.unlink()
+        except: pass
             
-        db.delete(doc)
+        db.delete(att)
         db.commit()
-        return {"success": True, "message": "Document deleted successfully"}
+        return {"success": True, "message": "Attachment deleted successfully"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
-@app.post("/api/documents/upload")
-async def upload_document(file: UploadFile = FastAPIFile(...)):
-    """Upload a new document to storage and database"""
+@app.post("/api/attachments/upload")
+async def upload_attachment(file: UploadFile = FastAPIFile(...), current_user: dict = Depends(get_current_user)):
+    """Upload a new attachment"""
     db = SessionLocal()
     try:
-        # Create storage directories if they don't exist
         upload_dir = Path("storage/manual_uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Read file content
         content = await file.read()
         file_hash = hashlib.sha256(content).hexdigest()
-        
-        # Define file path
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
         file_path = upload_dir / filename
-        
-        # Save file to disk
-        with open(file_path, "wb") as f:
-            f.write(content)
+        with open(file_path, "wb") as f: f.write(content)
             
-        # Create database entry
-        new_doc = Document(
-            filename=file.filename,
+        new_att = Attachment(
+            filename=filename,
             original_filename=file.filename,
             file_path=str(file_path),
             file_hash=file_hash,
             file_size_bytes=len(content),
-            mime_type=file.content_type,
-            category='Irrelevant',  # Explicitly mark manual uploads as Irrelevant initially
+            doc_type='Manual Upload',
             uploaded_at=datetime.utcnow(),
-            tender_id='N/A',    # Default tender ID
-            is_correct=False,   # Manual uploads are unverified by default
-            rejection_reason='Manually uploaded file'
+            thread_id='N/A'
         )
-        
-        db.add(new_doc)
+        db.add(new_att)
         db.commit()
-        db.refresh(new_doc)
-        
-        return {"success": True, "document_id": new_doc.id}
+        return {"success": True, "attachment_id": new_att.id}
     except Exception as e:
         db.rollback()
         print(f"Upload error: {e}")
@@ -1258,27 +1601,87 @@ async def upload_document(file: UploadFile = FastAPIFile(...)):
     finally:
         db.close()
 
+@app.post("/api/contacts")
+async def add_contact(contact_data: dict, current_user: dict = Depends(get_current_user)):
+    """Add a new contact"""
+    db = SessionLocal()
+    try:
+        new_contact = Contact(
+            name=contact_data.get("name"),
+            email=contact_data.get("email"),
+            phone=contact_data.get("phone"),
+            company=contact_data.get("company"),
+            job_title=contact_data.get("job_title"),
+            notes=contact_data.get("notes")
+        )
+        db.add(new_contact)
+        db.commit()
+        db.refresh(new_contact)
+        return {"success": True, "data": {"id": new_contact.id}}
+    except Exception as e:
+        db.rollback()
+        print(f"Error adding contact: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
 @app.get("/api/dashboard/stats")
-async def get_dashboard_stats():
+async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     """Get aggregate statistics for the dashboard"""
     db = SessionLocal()
     try:
-        # Count various entities with existence checks
-        active_tenders = db.query(Project).count()
+        active_threads = db.query(Thread).count()
         total_emails = db.query(Email).count()
+        total_contacts = db.query(Contact).count()
+        pending_replies = db.query(DraftEmail).count()
         unprocessed_emails = db.query(Email).filter(Email.processed == False).count()
-        # count ONLY RFI/Draft status
-        pending_rfis = db.query(DraftEmail).filter(DraftEmail.status == 'DRAFT').count()
-        total_clients = db.query(Client).count()
+        calendar_events = 0
+
+        # 6. Calendar Events (Today) - With Caching
+        cache_key = "dashboard_calendar_count"
+        now_ts = time.time()
+        if cache_key in calendar_cache:
+            ts, val = calendar_cache[cache_key]
+            if now_ts - ts < CACHE_TTL:
+                calendar_events = val
+            else: del calendar_cache[cache_key]
         
+        if cache_key not in calendar_cache:
+            try:
+                from agents.executive.scheduler import GoogleCalendarClient, OutlookCalendarClient
+                
+                def get_g_count_sync():
+                    try:
+                        g = GoogleCalendarClient()
+                        if g.connect(): return len(g.get_upcoming_events(days=1))
+                    except: pass
+                    return 0
+
+                def get_o_count_sync():
+                    try:
+                        o = OutlookCalendarClient()
+                        if o.connect(): return len(o.get_upcoming_events(days=1))
+                    except: pass
+                    return 0
+
+                g_count, o_count = await asyncio.gather(
+                    asyncio.to_thread(get_g_count_sync),
+                    asyncio.to_thread(get_o_count_sync)
+                )
+                calendar_events = g_count + o_count
+                calendar_cache[cache_key] = (now_ts, calendar_events)
+            except Exception as ce:
+                print(f"Calendar stats error: {ce}")
+
         return {
             "success": True,
             "data": {
-                "activeTenders": active_tenders,
+                "activeTenders": active_threads,
                 "unreadEmails": total_emails,
                 "unprocessedEmails": unprocessed_emails,
-                "pendingRFIs": pending_rfis,
-                "totalClients": total_clients
+                "pendingRFIs": pending_replies,
+                "totalClients": total_contacts,
+                "calendarEvents": calendar_events
             }
         }
     except Exception as e:
@@ -1290,7 +1693,8 @@ async def get_dashboard_stats():
                 "activeTenders": 0,
                 "unreadEmails": 0,
                 "pendingRFIs": 0,
-                "totalClients": 0
+                "totalClients": 0,
+                "calendarEvents": 0
             }
         }
     finally:
@@ -1304,7 +1708,7 @@ STATUS_CACHE = {
 import time
 
 @app.get("/api/status")
-async def get_system_status():
+async def get_system_status(current_user: dict = Depends(get_current_user)):
     """Check connectivity to various system components (cached for 60s)"""
     global STATUS_CACHE
     
@@ -1365,7 +1769,7 @@ from fastapi import BackgroundTasks
 from scripts.process_emails import process_email_batch
 
 @app.post("/api/documents/{doc_id}/toggle-correct")
-async def toggle_document_correct(doc_id: int):
+async def toggle_document_correct(doc_id: int, current_user: dict = Depends(get_current_user)):
     """Toggle the correctness status of a document"""
     db = SessionLocal()
     try:
@@ -1385,7 +1789,7 @@ async def toggle_document_correct(doc_id: int):
         db.close()
 
 @app.post("/api/drafts/{draft_id}/attachments")
-async def upload_draft_attachment(draft_id: int, file: UploadFile = FastAPIFile(...)):
+async def upload_draft_attachment(draft_id: int, file: UploadFile = FastAPIFile(...), current_user: dict = Depends(get_current_user)):
     """Upload a file and attach it to an existing draft email"""
     db = SessionLocal()
     try:
@@ -1425,46 +1829,182 @@ async def upload_draft_attachment(draft_id: int, file: UploadFile = FastAPIFile(
     finally:
         db.close()
 
-@app.post("/api/process-emails")
-async def process_emails_endpoint(background_tasks: BackgroundTasks):
-    """Trigger the email processing workflow in the background (or sync in DEMO)"""
-    try:
-        from scripts.run_rfq_agent import DEMO_MODE
-        
-        # Run the actual processing logic in background for real use
-        background_tasks.add_task(process_email_batch)
-        
-        return {
-            "success": True,
-            "message": "Email processing started in background.",
-        }
-    except Exception as e:
-        print(f"Error starting background email processing: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Global state for sync progress
+sync_progress = {"status": "Idle", "current": 0, "total": 0, "active": False}
 
 @app.get("/api/agent/status")
-async def get_agent_status():
+async def get_agent_status(current_user: dict = Depends(get_current_user)):
+    """Return the current processing status of the agent"""
+    return sync_progress
+
+@app.post("/api/process-emails")
+async def trigger_email_processing(current_user: dict = Depends(get_current_user)):
+    """Trigger the email processing agent and track progress"""
+    global sync_progress
+    try:
+        sync_progress["active"] = True
+        sync_progress["status"] = "Scanning Inboxes..."
+        
+        from agents.rfq_agent.email_fetcher import EmailFetcher
+        # If agent.py is missing/hidden, we handle gracefully
+        try:
+            from agents.rfq_agent.agent import RFQAgent
+            agent = RFQAgent()
+        except ImportError:
+            # Fallback or Mock
+            agent = None
+            print("Warning: RFQAgent not found, using manual extraction")
+            
+        from agents.rfq_agent.cloud_link_detector import CloudLinkDetector
+        link_detector = CloudLinkDetector()
+        db = SessionLocal()
+        
+        # We need to use a thread for the long-running process to not block status polling
+        # But for simpler implementation, we just update as we go.
+        # Note: In a production async app, this would be a background task.
+        
+        # Fetch from both Gmail and Outlook
+        emails = []
+        # Fetch from both Gmail and Outlook, keeping track of which fetcher fetched which email
+        emails = []
+        provider_fetchers = {}
+        for provider in ['gmail', 'outlook']:
+            try:
+                fetcher = EmailFetcher(provider=provider)
+                provider_fetchers[provider] = fetcher
+                provider_emails = fetcher.fetch_emails(limit=25)
+                if provider_emails:
+                    for pe in provider_emails:
+                        pe['_provider'] = provider # Tag for marking read later
+                    emails.extend(provider_emails)
+            except Exception as e:
+                print(f"Error fetching from {provider}: {e}")
+
+        if not emails:
+            sync_progress["active"] = False
+            sync_progress["status"] = "Idle"
+            return {"success": True, "processed": 0}
+
+        sync_progress["total"] = len(emails)
+        processed_count = 0
+        
+        for i, email in enumerate(emails):
+            sync_progress["current"] = i + 1
+            sync_progress["percentage"] = int((sync_progress["current"] / sync_progress["total"]) * 100)
+            subject_snip = email.get('subject', 'No Subject')[:25]
+            sync_progress["status"] = f"Analyzing {i+1}/{len(emails)}: {subject_snip}..."
+            
+            try:
+                print(f"\n---> STARTING ANALYSIS: {subject_snip} ({i+1}/{len(emails)})")
+                if agent:
+                    agent.process_incoming_email(email)
+                print(f"---> ANALYSIS COMPLETE. Now attempting to mark as read...")
+                
+                # Mark as read across providers
+                provider = email.get('_provider')
+                msg_id_for_api = email.get('email_id')
+                
+                if provider and msg_id_for_api:
+                    print(f"  [DEBUG] Attempting to mark as read: {msg_id_for_api} ({provider})")
+                    if provider in provider_fetchers:
+                        success = provider_fetchers[provider].mark_as_read(msg_id_for_api)
+                        if success:
+                            processed_count += 1
+                        else:
+                            print(f"  [!] Failed to mark {msg_id_for_api} as read via fetcher.")
+                else:
+                    print(f"  [!] Missing provider or ID for marking read: {provider}, {msg_id_for_api}")
+                
+                # Manual Cloud Link Extraction for the UI
+                cloud_links = link_detector.detect_links(email.get('body', ''))
+                if cloud_links:
+                    # Find the thread created for this email
+                    from database.models import Thread as TenderTable
+                    thread = db.query(TenderTable).filter(TenderTable.source_email == email.get('sender')).order_by(desc(TenderTable.created_at)).first()
+                    
+                    if thread:
+                        for link in cloud_links:
+                            # Avoid duplicates
+                            exists = db.query(Attachment).filter(
+                                Attachment.thread_id == thread.thread_id,
+                                Attachment.file_path == f"URL:{link['url']}"
+                            ).first()
+                            
+                            if not exists:
+                                # Classify safety
+                                safety_rating = link_detector.classify_link_safety(link['url'])
+                                safety_tag = f"[{safety_rating}] " if safety_rating != "TRUSTED" else ""
+                                if safety_rating == "SUSPICIOUS":
+                                    safety_tag = "[SUSPICIOUS ⚠️] "
+                                
+                                new_att = Attachment(
+                                    thread_id=thread.thread_id,
+                                    filename=f"{safety_tag}{link['provider'].value.title()} Link",
+                                    file_path=f"URL:{link['url']}",
+                                    doc_type="LINK",
+                                    file_size_bytes=0,
+                                    uploaded_at=datetime.utcnow(),
+                                    summary=f"Safety: {safety_rating}. Cloud link extracted from email body."
+                                )
+                                db.add(new_att)
+                                print(f"Registered {safety_rating} cloud link: {link['url']}")
+                        db.commit()
+                
+                processed_count += 1
+            except Exception as inner_e:
+                print(f"Error processing email {i+1}: {inner_e}")
+
+        sync_progress["status"] = "Syncing Dashboard..."
+        sync_progress["active"] = False
+        return {"success": True, "processed": processed_count}
+    except Exception as e:
+        sync_progress["active"] = False
+        sync_progress["status"] = f"Error: {str(e)}"
+        print(f"Global Sync Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if 'db' in locals():
+            db.close()
+
+@app.get("/api/agent/status/legacy")
+async def get_agent_status_legacy(current_user: dict = Depends(get_current_user)):
     """Get the latest progress from the AuditLog table"""
     db = SessionLocal()
     try:
         from sqlalchemy import desc
-        logs = db.query(AuditLog).filter(AuditLog.action.like("PROGRESS:%")).order_by(desc(AuditLog.timestamp)).limit(20).all()
+        # Ensure comparison is naive-to-naive
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        one_hour_ago = now_naive - timedelta(hours=1)
+        
+        logs = db.query(AuditLog).filter(
+            AuditLog.action.like("PROGRESS:%"),
+            AuditLog.timestamp >= one_hour_ago
+        ).order_by(desc(AuditLog.timestamp)).limit(20).all()
         
         # Determine if active by looking at the last few minutes
         is_active = False
         debug_info = {}
         if logs:
+            # Strip tzinfo from DB timestamp just in case it's aware
             last_timestamp = logs[0].timestamp
-            now = datetime.utcnow()
-            time_diff = (now - last_timestamp).total_seconds()
+            if last_timestamp.tzinfo:
+                last_timestamp = last_timestamp.replace(tzinfo=None)
+                
+            time_diff = (now_naive - last_timestamp).total_seconds()
             
             # Cases for is_active:
-            # 1. If last log is very recent (less than 2 mins)
-            if time_diff < 120:
+            # 1. Check if the last log indicates completion, failure, or being finished
+            last_action_lower = logs[0].action.lower()
+            batch_done = any(kw in last_action_lower for kw in ["complete", "finished", "failed"])
+            
+            # 2. Determine if active
+            if not batch_done and time_diff < 120:
                 is_active = True
-            # 2. If it's a "ongoing" log (not complete) and within the last 30 mins
-            elif time_diff < 1800 and not any(kw in logs[0].action.lower() for kw in ["complete", "finished", "failed"]):
+            elif not batch_done and time_diff < 1800:
+                # If it's a "ongoing" log (not complete) and within the last 30 mins
                 is_active = True
+            else:
+                is_active = False
         
         return {
             "success": True,
@@ -1500,112 +2040,127 @@ async def get_activity(limit: int = 10):
         ]
     }
 
-@app.get("/api/clients/{client_id}")
-async def get_client_api(client_id: int):
-    """Get a specific client by ID"""
+@app.get("/api/contacts/{contact_id}")
+async def get_contact_api(contact_id: int, current_user: dict = Depends(get_current_user)):
+    """Get a specific contact by ID"""
     db = SessionLocal()
     try:
-        client = db.query(Client).filter(Client.id == client_id).first()
-        if not client:
-            raise HTTPException(status_code=404, detail="Client not found")
+        contact = db.query(Contact).filter(Contact.id == contact_id).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
         return {
             "success": True,
             "data": {
-                "id": client.id,
-                "name": client.client_name,
-                "email": client.email_domain,
-                "first_seen": client.first_seen.isoformat() if client.first_seen else None,
-                "last_contact": client.last_contact.isoformat() if client.last_contact else None,
-                "tenders": len(client.tenders) if client.tenders else 0
+                "id": contact.id,
+                "name": contact.contact_name,
+                "email": contact.email_domain,
+                "first_seen": contact.first_seen.isoformat() if contact.first_seen else None,
+                "last_contact": contact.last_contact.isoformat() if contact.last_contact else None,
+                "threads": len(contact.threads) if contact.threads else 0
             }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
-@app.get("/api/clients")
-async def get_clients_api():
-    """Get all clients"""
+
+@app.get("/api/contacts")
+async def get_contacts_api(current_user: dict = Depends(get_current_user)):
+    """Get all contacts"""
     db = SessionLocal()
     try:
-        clients = db.query(Client).all()
+        contacts = db.query(Contact).all()
         return {
             "success": True,
-            "count": len(clients),
+            "count": len(contacts),
             "data": [
                 {
                     "id": c.id,
-                    "name": c.client_name, # Alias for frontend
-                    "email": c.email_domain, # Alias for frontend
-                    "phone": "N/A", # Placeholder
-                    "tenders": len(c.tenders) if c.tenders else 0,
-                    "status": "active" # Placeholder
+                    "name": c.contact_name,
+                    "email": c.email_domain,
+                    "threads": len(c.threads) if c.threads else 0,
+                    "status": "active"
                 }
-                for c in clients
+                for c in contacts
             ]
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
-@app.get("/api/tenders")
-async def get_tenders(status: Optional[str] = None):
-    """Get all tenders with optional status filter"""
+@app.get("/api/threads")
+async def get_threads(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Get all threads with optional status filter"""
     db = SessionLocal()
     try:
-        query = db.query(Tender)
+        query = db.query(Thread)
         if status:
-            query = query.filter(Tender.status == status)
-        tenders = query.order_by(desc(Tender.updated_at)).all()
+            query = query.filter(Thread.status == status)
+        threads = query.order_by(desc(Thread.updated_at)).all()
         
-        # Get document counts for each tender
-        doc_counts = {}
-        for t in tenders:
-            count = db.query(Document).filter(Document.tender_id == t.tender_id).count()
-            doc_counts[t.tender_id] = count
+        results = []
+        for t in threads:
+            count = db.query(Attachment).filter(Attachment.thread_id == t.thread_id).count()
+            
+            # Fetch latest meeting suggestion
+            latest_email = db.query(Email).filter(
+                Email.thread_id == t.thread_id,
+                Email.meta_data.isnot(None)
+            ).order_by(Email.received_at.desc()).first()
+            
+            meeting_suggestion = None
+            if latest_email and latest_email.meta_data:
+                meeting_suggestion = latest_email.meta_data.get('meeting_suggestion')
+            
+            # Force booked status if thread itself is marked as booked
+            if t.status == 'MEETING_BOOKED' and meeting_suggestion:
+                meeting_suggestion['booked'] = True
 
+            # Get sender email from first message
+            first_msg = db.query(Email).filter(Email.thread_id == t.thread_id).order_by(Email.received_at.asc()).first()
+            sender_email = first_msg.sender if first_msg else ""
+
+            results.append({
+                "id": t.id,
+                "thread_id": t.thread_id,
+                "status": t.status.lower() if t.status else "pending",
+                "contact": t.contact_name,
+                "sender_email": sender_email,
+                "subject": t.subject or t.topic_name,
+                "date": t.created_at.isoformat() if t.created_at else None,
+                "contact_name": t.contact_name,
+                "topic_name": t.topic_name,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+                "attachments": count,
+                "tags": [{"id": tag.id, "name": tag.name, "color": tag.color} for tag in t.tags],
+                "meeting_suggestion": meeting_suggestion
+            })
+            
         return {
             "success": True,
-            "data": [
-                {
-                    "id": t.id,
-                    "tender_id": t.tender_id,
-                    "status": t.status.lower() if t.status else "pending",
-                    "client": t.client_name, # Alias for frontend
-                    "subject": t.project_name, # Alias for frontend
-                    "date": t.created_at.isoformat() if t.created_at else None, # Alias for frontend
-                    "client_name": t.client_name,
-                    "project_name": t.project_name,
-                    "created_at": t.created_at.isoformat() if t.created_at else None,
-                    "updated_at": t.updated_at.isoformat() if t.updated_at else None,
-                    "documents": doc_counts.get(t.tender_id, 0)
-                }
-                for t in tenders
-            ]
+            "data": results
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
-@app.get("/api/tenders/{tender_id}")
-async def get_single_tender(tender_id: str):
-    """Get details for a specific tender"""
+@app.get("/api/threads/{thread_id}")
+async def get_single_thread(thread_id: str, current_user: dict = Depends(get_current_user)):
+    """Get details for a specific thread"""
     db = SessionLocal()
     try:
-        from database.models import Tender
-        tender = db.query(Tender).filter(Tender.tender_id == tender_id).first()
-        if not tender:
-            raise HTTPException(status_code=404, detail="Tender not found")
+        thread = db.query(Thread).filter(Thread.thread_id == thread_id).first()
+        if not thread:
+            raise HTTPException(status_code=404, detail="Thread not found")
         return {
-            "id": tender.id,
-            "tender_id": tender.tender_id,
-            "status": tender.status,
-            "client_name": tender.client_name,
-            "project_name": tender.project_name,
-            "tender_reference": tender.tender_reference,
-            "created_at": tender.created_at.isoformat() if tender.created_at else None
+            "id": thread.id,
+            "thread_id": thread.thread_id,
+            "status": thread.status,
+            "contact_name": thread.contact_name,
+            "topic_name": thread.topic_name,
+            "subject": thread.subject,
+            "created_at": thread.created_at.isoformat() if thread.created_at else None
         }
     except HTTPException:
         raise
@@ -1614,77 +2169,298 @@ async def get_single_tender(tender_id: str):
     finally:
         db.close()
 
-@app.get("/api/tenders/{tender_id}/documents")
-async def get_tender_documents(tender_id: str):
-    """Get documents associated with a tender (or all if undefined)"""
+@app.get("/api/attachments/{att_id}")
+async def get_attachment(att_id: int, current_user: dict = Depends(get_current_user)):
+    """Get metadata for a specific attachment"""
     db = SessionLocal()
     try:
-        # If 'undefined', 'all', or empty, return all documents for the general view
-        if not tender_id or tender_id in ('undefined', 'all'):
-            print("DEBUG: Fetching ALL documents")
-            docs = db.query(Document).order_by(desc(Document.uploaded_at)).all()
-        else:
-            print(f"DEBUG: Fetching documents for tender: {tender_id}")
-            docs = db.query(Document).filter(Document.tender_id == tender_id).all()
+        att = db.query(Attachment).filter(Attachment.id == att_id).first()
+        if not att:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        rel_path = att.file_path
+        if rel_path.startswith('./'): rel_path = rel_path[2:]
+        if rel_path.startswith('storage/'): rel_path = rel_path[len('storage/'):]
+        rel_path = rel_path.replace('\\', '/')
         
-        print(f"DEBUG: Found {len(docs)} documents in DB")
+        return {
+            "success": True,
+            "data": {
+                "id": att.id,
+                "filename": att.filename,
+                "view_url": f"/storage/{rel_path}",
+                "doc_type": att.doc_type,
+                "thread_id": att.thread_id,
+                "summary": att.summary,
+                "uploaded_at": att.uploaded_at.isoformat() if att.uploaded_at else None
+            }
+        }
+    finally:
+        db.close()
+
+@app.get("/api/threads/{thread_id}/attachments")
+async def get_thread_attachments(thread_id: str, current_user: dict = Depends(get_current_user)):
+    """Get attachments associated with a thread"""
+    db = SessionLocal()
+    try:
+        if not thread_id or thread_id in ('undefined', 'all'):
+            docs = db.query(Attachment).order_by(desc(Attachment.uploaded_at)).all()
+        else:
+            docs = db.query(Attachment).filter(Attachment.thread_id == thread_id).all()
             
-        # Get tender grouping context (Email info)
         email_info = {}
-        tender_ids = list(set([d.tender_id for d in docs if d.tender_id]))
-        if tender_ids:
-            emails = db.query(Email).filter(Email.tender_id.in_(tender_ids)).all()
+        thread_ids = list(set([d.thread_id for d in docs if d.thread_id]))
+        if thread_ids:
+            emails = db.query(Email).filter(Email.thread_id.in_(thread_ids)).all()
             for e in emails:
-                if e.tender_id not in email_info:
-                    email_info[e.tender_id] = {
-                        "subject": e.subject,
-                        "sender": e.sender
-                    }
+                if e.thread_id not in email_info:
+                    email_info[e.thread_id] = {"subject": e.subject, "sender": e.sender}
 
         results = []
         for d in docs:
-            # Fetch tender for updated_at
-            t = db.query(Tender).filter(Tender.tender_id == d.tender_id).first()
+            t = db.query(Thread).filter(Thread.thread_id == d.thread_id).first()
             results.append({
                 "id": d.id,
-                "name": d.filename,                               # Frontend expects .name
-                "type": (d.category or 'Irrelevant').lower(),     # Handle None category
-                "tender": d.tender_id or 'N/A',                   # Handle None tender_id
-                "tender_updated_at": t.updated_at.isoformat() if t and t.updated_at else d.uploaded_at.isoformat(),
-                "source_email": email_info.get(d.tender_id, {}).get('subject', 'N/A'),
-                "source_sender": email_info.get(d.tender_id, {}).get('sender', 'N/A'),
-                "version": d.version or 1,
+                "name": d.original_filename or d.filename,
+                "type": d.doc_type or 'Document',
+                "thread": d.thread_id or 'N/A',
+                "thread_updated_at": t.updated_at.isoformat() if t and t.updated_at else d.uploaded_at.isoformat(),
+                "source_email": email_info.get(d.thread_id, {}).get('subject', 'N/A'),
+                "source_sender": email_info.get(d.thread_id, {}).get('sender', 'N/A'),
+                "summary": d.summary,
                 "size": f"{d.file_size_bytes / 1024:.1f} KB" if d.file_size_bytes else "0 KB",
                 "date": d.uploaded_at.isoformat() if d.uploaded_at else datetime.utcnow().isoformat(),
-                "is_correct": d.is_correct if d.is_correct is not None else True
             })
-
-        # Inject empty tenders if fetching all
-        if not tender_id or tender_id in ('undefined', 'all'):
-            # Get all tenders from the Tender table
-            all_tenders = db.query(Tender).all()
-            existing_tenders = {d.tender_id for d in docs if d.tender_id}
             
-            for t in all_tenders:
-                if t.tender_id and t.tender_id not in existing_tenders:
-                    existing_tenders.add(t.tender_id)
+        # Inject empty threads if fetching all
+        if not thread_id or thread_id in ('undefined', 'all'):
+            all_threads = db.query(Thread).all()
+            existing_threads = {d.thread_id for d in docs if d.thread_id}
+            for t in all_threads:
+                if t.thread_id and t.thread_id not in existing_threads:
                     results.append({
                         "id": f"empty_{t.id}",
-                        "name": "No documents attached",
-                        "type": "missing",
-                        "tender": t.tender_id,
-                        "tender_updated_at": t.updated_at.isoformat() if t.updated_at else t.created_at.isoformat(),
-                        "source_email": t.project_name or t.tender_reference or t.tender_id,
-                        "source_sender": t.client_name or "Unknown",
-                        "version": "-",
+                        "name": "No attachments",
+                        "type": "none",
+                        "thread": t.thread_id,
+                        "thread_updated_at": t.updated_at.isoformat() if t.updated_at else t.created_at.isoformat(),
+                        "source_email": t.subject or t.topic_name,
+                        "source_sender": t.contact_name or "Unknown",
                         "size": "0 KB",
                         "date": t.created_at.isoformat() if t.created_at else datetime.utcnow().isoformat(),
-                        "is_correct": False
                     })
-
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.post("/api/meetings/book-suggested")
+async def book_suggested_meeting(request: Dict, current_user: dict = Depends(get_current_user)):
+    """Book a meeting suggested by AI for a specific thread"""
+    thread_id = request.get('thread_id')
+    provider = request.get('provider', 'google') # Default or detect from email
+    
+    db = SessionLocal()
+    try:
+        # 1. Find the latest email for this thread with meeting_suggestion meta
+        from database.models import Email, Thread
+        from agents.executive.scheduler import GoogleCalendarClient, OutlookCalendarClient
+
+        email = db.query(Email).filter(
+            Email.thread_id == thread_id,
+            Email.meta_data.isnot(None)
+        ).order_by(Email.received_at.desc()).first()
+        
+        if not email or not email.meta_data or 'meeting_suggestion' not in email.meta_data:
+            raise HTTPException(status_code=404, detail="No meeting suggestion found for this thread.")
+            
+        suggestion = email.meta_data['meeting_suggestion']
+        
+        # 2. Create the event
+        event_title = suggestion.get('topic', 'Business Meeting')
+        start_time = suggestion.get('start_time')
+        end_time = suggestion.get('end_time')
+        import re
+        attendee_email = email.sender
+        match = re.search(r'<(.*?)>', attendee_email)
+        if match:
+            attendee_email = match.group(1)
+            
+        attendee_list = [attendee_email]
+        
+        if provider == 'google':
+            client = GoogleCalendarClient()
+            if not client.connect():
+                raise HTTPException(status_code=500, detail=f"Failed to connect to Google calendar.")
+            result = client.create_event(
+                summary=event_title,
+                start_time=start_time,
+                end_time=end_time,
+                description=f"Automated booking via AI Assistant.\nSource Thread: {thread_id}",
+                attendees=attendee_list
+            )
+        else:
+            client = OutlookCalendarClient()
+            if not client.connect():
+                raise HTTPException(status_code=500, detail=f"Failed to connect to Outlook calendar.")
+            result = client.create_event(
+                subject=event_title,
+                start_time=start_time,
+                end_time=end_time,
+                body_preview=f"Automated booking via AI Assistant.\nSource Thread: {thread_id}",
+                attendees=attendee_list
+            )
+        
+        # 3. Mark as booked in metadata
+        from sqlalchemy.orm.attributes import flag_modified
+        meta = dict(email.meta_data)
+        meta['meeting_suggestion']['booked'] = True
+        email.meta_data = meta
+        flag_modified(email, "meta_data")
+        db.commit()
+        
+        # 4. Clear calendar cache so it shows up in dashboard/agenda
+        global calendar_cache
+        calendar_cache.clear()
+        
+        return {"success": True, "data": result}
+    except Exception as e:
+        print(f"Error booking suggested meeting: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.get("/api/tasks")
+async def get_tasks(current_user: dict = Depends(get_current_user)):
+    """Get all AI-extracted action items from emails"""
+    db = SessionLocal()
+    try:
+        from database.models import Email
+        # Find all emails with action_items in meta_data
+        emails = db.query(Email).filter(
+            Email.meta_data.isnot(None)
+        ).all()
+        
+        tasks = []
+        for e in emails:
+            items = e.meta_data.get('action_items', [])
+            for item in items:
+                tasks.append({
+                    "email_id": e.email_id,
+                    "thread_id": e.thread_id,
+                    "subject": e.subject,
+                    "sender": e.sender,
+                    "task": item,
+                    "received_at": e.received_at.isoformat() if e.received_at else None
+                })
+        
+        # Sort by latest first
+        tasks.sort(key=lambda x: x['received_at'] or '', reverse=True)
+        return {"success": True, "count": len(tasks), "data": tasks[:20]} # Limit to 20
+    finally:
+        db.close()
+
+@app.get("/api/morning-brief")
+async def get_morning_brief(current_user: dict = Depends(get_current_user)):
+    """Aggregate a proactive summary for the executive"""
+    db = SessionLocal()
+    try:
+        from database.models import Thread, Email, FollowupTask
+        from agents.executive.scheduler import GoogleCalendarClient
+        from datetime import datetime, timedelta, timezone
+        
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        
+        # 1. Today's Meetings & Upcoming
+        meetings_count = 0
+        upcoming_count = 0
+        try:
+            cal = GoogleCalendarClient()
+            if cal.connect():
+                events = cal.get_upcoming_events(days=7) # Look ahead 7 days
+                today_str = today_start.strftime('%Y-%m-%d')
+                
+                today_meetings = [e for e in events if e.get('start', {}).get('dateTime', '').startswith(today_str)]
+                meetings_count = len(today_meetings)
+                
+                upcoming_meetings = [e for e in events if not e.get('start', {}).get('dateTime', '').startswith(today_str)]
+                upcoming_count = len(upcoming_meetings)
+        except: pass
+        
+        # 2. Urgent Emails (last 24h)
+        yesterday = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+        urgent_count = db.query(Thread).filter(
+            Thread.status == 'urgent'
+        ).count() # Total urgent
+        
+        # 3. Pending Follow-ups
+        stale_count = db.query(FollowupTask).filter(FollowupTask.status == 'PENDING').count()
+        
+        # 4. Critical Action Items (last 48h for more context)
+        task_count = 0
+        search_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=2)
+        emails_with_tasks = db.query(Email).filter(Email.meta_data.isnot(None), Email.received_at >= search_date).all()
+        for e in emails_with_tasks:
+            task_count += len(e.meta_data.get('action_items', []))
+
+        # Build the brief string
+        if meetings_count > 0:
+            brief = f"Good morning, Abdullah. You have {meetings_count} meetings scheduled for today. "
+        elif upcoming_count > 0:
+            brief = f"Good morning, Abdullah. Your day is clear today, but you have {upcoming_count} meetings coming up this week. "
+        else:
+            brief = f"Good morning, Abdullah. You have no meetings on your calendar. "
+
+        if urgent_count > 0:
+            brief += f"There are {urgent_count} threads marked as urgent. "
+        if task_count > 0:
+            brief += f"I've identified {task_count} action items for you. "
+        if stale_count > 0:
+            brief += f"You have {stale_count} threads that may need a follow-up."
+
+        return {
+            "success": True,
+            "brief": brief,
+            "stats": {
+                "meetings": meetings_count,
+                "urgents": urgent_count,
+                "tasks": task_count,
+                "stale": stale_count
+            }
+        }
+    finally:
+        db.close()
+
+@app.get("/api/contacts/{contact_id}/intelligence")
+async def get_contact_intelligence(contact_id: int, current_user: dict = Depends(get_current_user)):
+    """Deep historical overview for a specific contact"""
+    db = SessionLocal()
+    try:
+        from database.models import Contact, Thread
+        contact = db.query(Contact).get(contact_id)
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+            
+        threads = db.query(Thread).filter(Thread.contact_id == contact_id).order_by(Thread.updated_at.desc()).limit(5).all()
+        
+        history = []
+        for t in threads:
+            history.append({
+                "thread_id": t.thread_id,
+                "subject": t.subject,
+                "status": t.status,
+                "last_update": t.updated_at.isoformat() if t.updated_at else None
+            })
+            
+        return {
+            "success": True,
+            "contact": {
+                "name": contact.contact_name,
+                "domain": contact.email_domain,
+                "interaction_count": len(contact.threads)
+            },
+            "recent_history": history
+        }
     finally:
         db.close()
 
@@ -1700,7 +2476,7 @@ async def get_api_gmail_oauth_status():
 
 # AI Assistant Chat Endpoint
 @app.post("/api/assistant/extract-text")
-async def extract_text(file: UploadFile = FastAPIFile(...)):
+async def extract_text(file: UploadFile = FastAPIFile(...), current_user: dict = Depends(get_current_user)):
     """Extract text from uploaded documents for AI context"""
     try:
         content = await file.read()
@@ -1727,7 +2503,7 @@ async def extract_text(file: UploadFile = FastAPIFile(...)):
         return {"success": False, "error": str(e)}
 
 @app.get("/api/assistant/conversations")
-async def get_conversations():
+async def get_conversations(current_user: dict = Depends(get_current_user)):
     """Get list of all conversations"""
     db = SessionLocal()
     try:
@@ -1752,7 +2528,7 @@ async def get_conversations():
         db.close()
 
 @app.post("/api/assistant/conversations")
-async def create_conversation(request: CreateConversationRequest):
+async def create_conversation(request: CreateConversationRequest, current_user: dict = Depends(get_current_user)):
     """Create a new conversation thread"""
     db = SessionLocal()
     try:
@@ -1775,7 +2551,7 @@ async def create_conversation(request: CreateConversationRequest):
         db.close()
 
 @app.delete("/api/assistant/conversations/{conv_id}")
-async def delete_conversation(conv_id: int):
+async def delete_conversation(conv_id: int, current_user: dict = Depends(get_current_user)):
     """Delete a conversation and its messages"""
     db = SessionLocal()
     try:
@@ -1793,7 +2569,7 @@ async def delete_conversation(conv_id: int):
         db.close()
 
 @app.get("/api/assistant/history")
-async def get_chat_history(conversation_id: Optional[int] = None, limit: int = 50):
+async def get_chat_history(conversation_id: Optional[int] = None, limit: int = 50, current_user: dict = Depends(get_current_user)):
     """Get recent chat history for a specific conversation"""
     db = SessionLocal()
     try:
@@ -1825,7 +2601,7 @@ async def get_chat_history(conversation_id: Optional[int] = None, limit: int = 5
         db.close()
 
 @app.post("/api/assistant/chat")
-async def assistant_chat(request: AssistantChatRequest):
+async def assistant_chat(request: AssistantChatRequest, current_user: dict = Depends(get_current_user)):
     """General AI Assistant chat endpoint with conversation support"""
     print(f"Assistant chat request: {request.message[:50]}...")
     db = SessionLocal()
@@ -1852,38 +2628,14 @@ async def assistant_chat(request: AssistantChatRequest):
                     conv.title = request.message[:30] + "..."
                 db.commit()
 
-        # Save user message to database
-        user_msg = AssistantChat(role='user', content=request.message, conversation_id=conv_id)
-        db.add(user_msg)
-        db.commit()
-
-        ai_client = PixtralClient()
-        
-        user_prompt = request.message
-        if request.context:
-            user_prompt = f"Context from documents:\n{request.context}\n\nUser Question: {request.message}"
-            
-        result = ai_client.chat(
-            system_prompt=ASSISTANT_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.7
-        )
-        
-        if not result or result.get('error'):
-            raise HTTPException(status_code=500, detail=result.get('error', "AI chat failed"))
-            
-        ai_response = result.get('response', "I'm sorry, I couldn't generate a response.")
-        
-        # Save assistant message to database
-        assistant_msg = AssistantChat(role='assistant', content=ai_response, conversation_id=conv_id)
-        db.add(assistant_msg)
-        db.commit()
+        # Process query via ExecutiveAssistant (handles RAG and message saving)
+        assistant = ExecutiveAssistant(db)
+        ai_response = assistant.answer_query(request.message, conversation_id=conv_id)
         
         return {
             "success": True,
             "response": ai_response,
-            "conversation_id": conv_id,
-            "reasoning": result.get('reasoning')
+            "conversation_id": conv_id
         }
     except Exception as e:
         print(f"Error in assistant chat: {e}")
@@ -1897,9 +2649,387 @@ async def assistant_chat(request: AssistantChatRequest):
 def health_check():
     return {"status": "healthy"}
 
+@app.get("/api/assistant/conversations")
+async def get_assistant_conversations(current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        convs = db.query(AssistantConversation).order_by(desc(AssistantConversation.last_message_at)).all()
+        return {
+            "success": True,
+            "data": [{"id": c.id, "title": c.title, "last_message_at": c.last_message_at} for c in convs]
+        }
+    finally:
+        db.close()
+
+@app.post("/api/assistant/conversations")
+async def create_assistant_conversation(request: CreateConversationRequest, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        new_conv = AssistantConversation(title=request.title)
+        db.add(new_conv)
+        db.commit()
+        db.refresh(new_conv)
+        return {"success": True, "data": {"id": new_conv.id, "title": new_conv.title}}
+    finally:
+        db.close()
+
+@app.delete("/api/assistant/conversations/{conv_id}")
+async def delete_assistant_conversation(conv_id: int, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        conv = db.query(AssistantConversation).filter(AssistantConversation.id == conv_id).first()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        # Delete related messages first
+        db.query(AssistantChat).filter(AssistantChat.conversation_id == conv_id).delete()
+        db.delete(conv)
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.get("/api/assistant/history")
+async def get_assistant_history(conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        query = db.query(AssistantChat)
+        if conversation_id:
+            query = query.filter(AssistantChat.conversation_id == conversation_id)
+        
+        history = query.order_by(AssistantChat.timestamp).all()
+        return {
+            "success": True,
+            "data": [{"role": m.role, "content": m.content, "timestamp": m.timestamp} for m in history]
+        }
+    finally:
+        db.close()
+
+@app.get("/api/calendar/events")
+async def get_calendar_events(days: int = 7, current_user: dict = Depends(get_current_user)):
+    """Aggregate events from Google and Outlook Calendars"""
+    from agents.executive.scheduler import GoogleCalendarClient, OutlookCalendarClient
+    
+    # Caching logic - DISABLED FOR REAL-TIME SYNC
+    cache_key = f"calendar_events_{days}"
+    # forcing fresh fetch every time for now to debug
+    if cache_key in calendar_cache:
+        del calendar_cache[cache_key]
+
+    # Parallel fetch for performance if not in cache or expired
+    import asyncio
+    
+    # Using asyncio.to_thread to prevent blocking the main event loop
+    import asyncio
+    
+    def fetch_google_sync():
+        events = []
+        try:
+            g_client = GoogleCalendarClient()
+            if g_client.connect():
+                g_events = g_client.get_upcoming_events(days=days)
+                print(f"[API] Google returned {len(g_events)} events")
+                for ev in g_events:
+                    start = ev.get('start', {}).get('dateTime', ev.get('start', {}).get('date'))
+                    end = ev.get('end', {}).get('dateTime', ev.get('end', {}).get('date'))
+                    attendees = [{"name": att.get('displayName') or att.get('email'), "email": att.get('email'), "response": att.get('responseStatus')} for att in ev.get('attendees', [])]
+                    events.append({
+                        "id": ev.get('id'),
+                        "title": ev.get('summary', 'No Title'),
+                        "start": start,
+                        "end": end,
+                        "location": ev.get('location'),
+                        "description": ev.get('description'),
+                        "attendees": attendees,
+                        "link": ev.get('hangoutLink') or ev.get('htmlLink'),
+                        "source": "google",
+                        "color": "#4285F4"
+                    })
+            else:
+                print("[API] Google Calendar connection failed")
+        except Exception as e: print(f"[API] Google fetch error: {e}")
+        return events
+
+    def fetch_outlook_sync():
+        events = []
+        try:
+            o_client = OutlookCalendarClient()
+            if o_client.connect():
+                o_events = o_client.get_upcoming_events(days=days)
+                print(f"[API] Outlook returned {len(o_events)} events")
+                for ev in o_events:
+                    start = ev.get('start', {}).get('dateTime')
+                    end = ev.get('end', {}).get('dateTime')
+                    attendees = [{"name": att.get('emailAddress', {}).get('name') or att.get('emailAddress', {}).get('address'), "email": att.get('emailAddress', {}).get('address'), "response": att.get('status', {}).get('response')} for att in ev.get('attendees', [])]
+                    events.append({
+                        "id": ev.get('id'),
+                        "title": ev.get('subject', 'No Title'),
+                        "start": start,
+                        "end": end,
+                        "location": ev.get('location', {}).get('displayName'),
+                        "description": ev.get('bodyPreview'),
+                        "attendees": attendees,
+                        "link": ev.get('onlineMeetingUrl') or ev.get('webLink'),
+                        "source": "outlook",
+                        "color": "#0078D4"
+                    })
+            else:
+                print("[API] Outlook Calendar connection failed")
+        except Exception as e: print(f"[API] Outlook fetch error: {e}")
+        return events
+
+    g_results, o_results = await asyncio.gather(
+        asyncio.to_thread(fetch_google_sync),
+        asyncio.to_thread(fetch_outlook_sync)
+    )
+    all_events = g_results + o_results
+    
+    # DEBUG: Print titles to terminal
+    print(f"[DEBUG] Total events found: {len(all_events)}")
+    for ev in all_events:
+        print(f"  - [{ev['source'].upper()}] {ev['title']} at {ev['start']}")
+
+    # Save to cache
+    now_ts = time.time()
+    calendar_cache[cache_key] = (now_ts, all_events)
+
+    return {
+        "success": True,
+        "data": all_events
+    }
+
+@app.post("/api/calendar/events")
+async def create_calendar_event(request: CreateEventRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new event on the selected calendar provider"""
+    from agents.executive.scheduler import GoogleCalendarClient, OutlookCalendarClient
+    global calendar_cache
+    
+    try:
+        # --- Clean up description BEFORE creating the event ---
+        description = request.description or ""
+        if "Need to reschedule?" in description:
+            import re
+            description = re.sub(r'Need to reschedule\?.*$', '', description, flags=re.IGNORECASE | re.DOTALL).strip()
+            # Also remove any leftover HTML tags if they were missed
+            description = re.sub(r'<[^>]+>', '', description).strip()
+
+        print(f"[DEBUG] Creating event: {request.provider.upper()} - {request.title} from {request.start_time} to {request.end_time}")
+        if request.provider == 'google':
+            client = GoogleCalendarClient()
+            if client.connect():
+                result = client.create_event(
+                    summary=request.title,
+                    start_time=request.start_time,
+                    end_time=request.end_time,
+                    description=description,
+                    attendees=request.attendees
+                )
+                print(f"[DEBUG] Google Creation Result: {json.dumps(result, indent=2)}")
+                # Fetch the hangout link from the full result
+                meet_link = result.get('hangoutLink') or result.get('htmlLink') or ""
+                
+                # --- Send Professional Inbox Notification ---
+                try:
+                    from agents.rfq_agent.gmail_api_client import GmailAPIFetcher
+                    gmail = GmailAPIFetcher()
+                    if gmail.connect():
+                        for email_addr in request.attendees:
+                            email_body = f"""Hi,
+
+I've scheduled a meeting with you regarding: {request.title}
+
+Time: {request.start_time} (UTC)
+
+{f"Agenda: {description}" if description else ""}
+
+You can join the meeting directly via Google Meet here:
+{meet_link}
+
+Looking forward to our discussion.
+
+Best regards,
+AI Executive Assistant
+"""
+                            gmail.send_immediate_email(
+                                to=email_addr,
+                                subject=f"Meeting Scheduled: {request.title}",
+                                body=email_body
+                            )
+                        print(f"[API] Professional notifications sent to {len(request.attendees)} guests with link: {meet_link}")
+                except Exception as ex:
+                    print(f"[API] Manual notification failed: {ex}")
+                # ---------------------------------------------
+
+                global calendar_cache
+                calendar_cache.clear()
+                # result already assigned at line 2782
+        elif request.provider == 'outlook':
+            client = OutlookCalendarClient()
+            if client.connect():
+                result = client.create_event(
+                    subject=request.title,
+                    start_time=request.start_time,
+                    end_time=request.end_time,
+                    body_preview=request.description,
+                    attendees=request.attendees
+                )
+                calendar_cache.clear()
+        
+        
+        if request.thread_id:
+            db = SessionLocal()
+            try:
+                from database.models import Email
+                from sqlalchemy.orm.attributes import flag_modified
+                emails = db.query(Email).filter(Email.thread_id == request.thread_id).all()
+                for email in emails:
+                    if email.meta_data and 'meeting_suggestion' in email.meta_data:
+                        meta = dict(email.meta_data)
+                        meta['meeting_suggestion']['booked'] = True
+                        email.meta_data = meta
+                        flag_modified(email, "meta_data")
+                
+                # Force cache update for status
+                from database.models import Thread
+                thread = db.query(Thread).filter(Thread.thread_id == request.thread_id).first()
+                if thread:
+                    thread.status = 'MEETING_BOOKED'
+                
+                db.commit()
+                # HARD CLEAR CALENDAR CACHE
+                calendar_cache = {} 
+            finally:
+                db.close()
+
+        # Final return after provider logic
+        if 'result' in locals():
+            return result
+            
+        return {"success": False, "error": f"Provider '{request.provider}' not connected or unsupported"}
+    except Exception as e:
+        print(f"Error creating calendar event: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.delete("/api/calendar/events/{provider}/{event_id:path}")
+async def delete_calendar_event(provider: str, event_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete an event from the calendar provider"""
+    from agents.executive.scheduler import GoogleCalendarClient, OutlookCalendarClient
+    
+    try:
+        if provider == 'google':
+            client = GoogleCalendarClient()
+            if client.connect():
+                result = client.delete_event(event_id)
+                global calendar_cache
+                calendar_cache.clear()
+                return result
+        elif provider == 'outlook':
+            client = OutlookCalendarClient()
+            if client.connect():
+                result = client.delete_event(event_id)
+                calendar_cache.clear()
+                return result
+        
+        return {"success": False, "error": f"Provider '{provider}' not connected or unsupported"}
+    except Exception as e:
+        print(f"Error deleting calendar event: {e}")
+        return {"success": False, "error": str(e)}
+
+# ==========================================
+# FOLLOW-UP ASSISTANT ENDPOINTS
+# ==========================================
+
+@app.get("/api/followups")
+async def get_followups(current_user: str = Depends(get_current_user)):
+    """Get pending follow-up suggestions"""
+    from database.models import FollowupTask, Thread
+    db = SessionLocal()
+    try:
+        followups = db.query(FollowupTask).filter(FollowupTask.status == 'PENDING').all()
+        results = []
+        for f in followups:
+            thread = db.query(Thread).filter(Thread.thread_id == f.thread_id).first()
+            results.append({
+                "id": f.id,
+                "thread_id": f.thread_id,
+                "subject": thread.subject if thread else "Unknown Subject",
+                "recipient": f.recipient,
+                "suggested_body": f.suggested_body,
+                "due_at": f.due_at.isoformat() if f.due_at else None,
+                "created_at": f.created_at.isoformat()
+            })
+        return results
+    finally:
+        db.close()
+
+@app.post("/api/followups/{task_id}/dismiss")
+async def dismiss_followup(task_id: int, current_user: str = Depends(get_current_user)):
+    """Dismiss a follow-up suggestion"""
+    from database.models import FollowupTask
+    db = SessionLocal()
+    try:
+        task = db.query(FollowupTask).filter(FollowupTask.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        task.status = 'DISMISSED'
+        db.commit()
+        return {"status": "success"}
+    finally:
+        db.close()
+
+@app.post("/api/followups/{task_id}/approve")
+async def approve_followup(task_id: int, current_user: str = Depends(get_current_user)):
+    """Convert a follow-up suggestion into a real draft"""
+    from database.models import FollowupTask, Thread, DraftReply
+    from agents.rfq_agent.email_fetcher import EmailFetcher
+    
+    db = SessionLocal()
+    try:
+        task = db.query(FollowupTask).filter(FollowupTask.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        provider = "gmail" if "@gmail.com" in (task.recipient or "").lower() else "outlook"
+        fetcher = EmailFetcher(provider=provider)
+        if not fetcher.connect():
+            raise HTTPException(status_code=500, detail=f"Could not connect to {provider}")
+        
+        try:
+            thread = db.query(Thread).filter(Thread.thread_id == task.thread_id).first()
+            subject = f"Follow-up: {thread.subject}" if thread else "Follow-up"
+            
+            draft_result = fetcher.fetcher.create_draft(
+                to=task.recipient,
+                subject=subject,
+                body=task.suggested_body
+            )
+            
+            if draft_result.get('success'):
+                new_draft = DraftReply(
+                    thread_id=task.thread_id,
+                    recipient=task.recipient,
+                    subject=subject,
+                    body=task.suggested_body,
+                    email_provider=provider,
+                    provider_draft_id=draft_result['draft_id'],
+                    status='DRAFT'
+                )
+                db.add(new_draft)
+                task.status = 'COMPLETED'
+                db.commit()
+                return {"status": "success", "draft_id": draft_result['draft_id']}
+            else:
+                raise Exception(draft_result.get('error', 'Unknown Error'))
+        finally:
+            fetcher.disconnect()
+    except Exception as e:
+        print(f"Error approving followup: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 # Mounts at the end to avoid intercepting API routes
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 app.mount("/", StaticFiles(directory="ui", html=True), name="ui")
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

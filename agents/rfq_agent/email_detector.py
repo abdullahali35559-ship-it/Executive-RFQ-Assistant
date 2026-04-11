@@ -1,80 +1,77 @@
 from models.pixtral_client import PixtralClient
-from config.prompts import RFQ_AGENT_SYSTEM_PROMPT, EMAIL_DETECTION_PROMPT_TEMPLATE
+from config.prompts import GENERAL_EMAIL_ASSISTANT_PROMPT, JUNK_FILTER_PROMPT
 from typing import Dict
 
 class EmailDetector:
-    """Detect if emails are tender-related using Pixtral"""
+    """Detect if emails are actionable business correspondence or junk using LLM"""
     
     def __init__(self):
         self.llm = PixtralClient()
-        self.system_prompt = RFQ_AGENT_SYSTEM_PROMPT
+        self.system_prompt = GENERAL_EMAIL_ASSISTANT_PROMPT
     
-    def detect_tender_email(self, 
-                            email_id: str,
-                            subject: str, 
-                            sender: str, 
-                            body: str,
-                            attachments: list = None) -> Dict:
+    def detect_actionable_email(self, 
+                                email_id: str,
+                                subject: str, 
+                                sender: str, 
+                                body: str,
+                                attachments: list = None) -> Dict:
         """
-        Detect if email is tender-related using Pixtral
+        Detect if email is actionable business correspondence using LLM
         """
         
         attachment_names = [a.get('filename', '') for a in attachments] if attachments else []
         attachments_str = ", ".join(attachment_names) if attachment_names else "None"
         
         # Prepare user prompt
-        user_prompt = EMAIL_DETECTION_PROMPT_TEMPLATE.format(
+        user_prompt = JUNK_FILTER_PROMPT.format(
             subject=subject,
             sender=sender,
             attachments=attachments_str,
-            body_preview=body[:3000]  # First 3000 chars for full context
+            body_preview=body[:3000]
         )
         
-        # Few-shot examples
+        # Few-shot examples for Junk vs Actionable
         examples = [
             {
                 "input": {
-                    "subject": "RFQ-NEOM-2026-001 - MEP Package",
-                    "sender": "tenders@neom.com",
-                    "attachments": "ITT_Instructions.pdf, BOQ_MEP.xlsx",
-                    "body": "Please submit your quote..."
+                    "subject": "Inquiry: Project Quotation Request",
+                    "sender": "client@example.com",
+                    "attachments": "Specs.pdf",
+                    "body": "We would like to request a quote for our upcoming project..."
                 },
                 "output": {
-                    "is_tender": True,
-                    "confidence": 0.98,
-                    "keywords_found": ["RFQ", "NEOM", "quote"],
-                    "reasoning": "Subject contains RFQ reference, known client sender",
-                    "action": "PROCEED"
-                }
-            },
-            {
-                "input": {
-                    "subject": "For calculation",
-                    "sender": "zohaibafzal8687@gmail.com",
-                    "attachments": "Project_Specs.pdf",
-                    "body": "Dear Tender, Please find attached the document..."
-                },
-                "output": {
-                    "is_tender": True,
-                    "confidence": 0.95,
-                    "keywords_found": ["calculation", "specification"],
-                    "reasoning": "Subject indicates takeoff request, includes technical documents",
-                    "action": "PROCEED"
-                }
-            },
-            {
-                "input": {
-                    "subject": "Your Zoho CRM Trial Has Ended",
-                    "sender": "shehbaz@zoho.com",
-                    "attachments": "None",
-                    "body": "Maximize your experience now..."
-                },
-                "output": {
-                    "is_tender": False,
+                    "type": "ACTIONABLE",
+                    "is_junk": False,
                     "confidence": 0.99,
-                    "keywords_found": [],
-                    "reasoning": "Marketing/CRM notification, not construction related",
-                    "action": "IGNORE"
+                    "reasoning": "Direct business inquiry with relevant attachments."
+                }
+            },
+            {
+                "input": {
+                    "subject": "Your Hostinger Invoice #123456",
+                    "sender": "billing@hostinger.com",
+                    "attachments": "Invoice.pdf",
+                    "body": "Thank you for your payment. Your hosting has been renewed."
+                },
+                "output": {
+                    "type": "JUNK",
+                    "is_junk": True,
+                    "confidence": 0.98,
+                    "reasoning": "Automated transactional receipt/invoice from a service provider."
+                }
+            },
+            {
+                "input": {
+                    "subject": "Meeting: Technical Review",
+                    "sender": "partner@company.com",
+                    "attachments": "None",
+                    "body": "Can we schedule a call to review the technical details?"
+                },
+                "output": {
+                    "type": "ACTIONABLE",
+                    "is_junk": False,
+                    "confidence": 0.95,
+                    "reasoning": "Communication regarding technical coordination."
                 }
             }
         ]
@@ -89,22 +86,15 @@ class EmailDetector:
         
         # Validate result
         if not isinstance(result, dict):
-            print(f"Warning: LLM did not return a dict. Got: {type(result)}")
-            return {"is_tender": False, "confidence": 0.0, "error": "Invalid response format"}
+            return {"type": "ACTIONABLE", "is_junk": False, "confidence": 0.0, "error": "Invalid response format"}
         
-        if 'is_tender' not in result:
-            print(f"Warning: 'is_tender' not in response. Keys: {result.keys()}")
-            # Try to infer from response text or subject/attachments
-            if 'response' in result or subject:
-                text = (result.get('response', '') + " " + subject + " " + attachments_str).lower()
-                is_tender = any(kw in text for kw in ['rfq', 'tender', 'quotation', 'itt', 'calculation', 'boq', 'mep', 'bid'])
-                return {
-                    "is_tender": is_tender,
-                    "confidence": 0.6,
-                    "keywords_found": [],
-                    "reasoning": "Inferred from text/keywords fallback",
-                    "action": "PROCEED" if is_tender else "IGNORE"
-                }
-            return {"is_tender": False, "confidence": 0.0, "error": "Missing 'is_tender' field"}
+        # Mapping for backward compatibility if needed in some parts
+        result['is_actionable'] = result.get('type') == "ACTIONABLE"
         
         return result
+
+    def detect_tender_email(self, *args, **kwargs):
+        """Legacy wrapper for backward compatibility"""
+        res = self.detect_actionable_email(*args, **kwargs)
+        res['is_tender'] = res.get('is_actionable', False)
+        return res

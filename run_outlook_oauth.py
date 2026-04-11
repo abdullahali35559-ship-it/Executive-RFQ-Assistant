@@ -24,9 +24,10 @@ AUTHORITY = f"https://login.microsoftonline.com/{OUTLOOK_TENANT_ID}"
 
 # Scopes (offline_access is auto-added by MSAL)
 SCOPES = [
-    "https://graph.microsoft.com/Mail.Read",
-    "https://graph.microsoft.com/Mail.ReadWrite", 
-    "https://graph.microsoft.com/Mail.Send"
+    'https://graph.microsoft.com/Mail.ReadWrite',
+    'https://graph.microsoft.com/Mail.Send',
+    'https://graph.microsoft.com/IMAP.AccessAsUser.All',
+    'https://graph.microsoft.com/Calendars.ReadWrite'
 ]
 
 TOKEN_FILE = ".outlook_oauth_token.json"

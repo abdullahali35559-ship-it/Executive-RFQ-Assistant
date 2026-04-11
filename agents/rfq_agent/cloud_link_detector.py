@@ -26,9 +26,9 @@ class CloudLinkDetector:
         r'https://[a-zA-Z0-9-]+\.sharepoint\.com/personal/[^\s]+'
     ]
     
-    # SharePoint patterns
+    # SharePoint patterns (More inclusive)
     SHAREPOINT_PATTERNS = [
-        r'https://[a-zA-Z0-9-]+\.sharepoint\.com/sites/[^\s]+',
+        r'https://[a-zA-Z0-9-]+\.sharepoint\.com/[^\s]+',
         r'https://[a-zA-Z0-9-]+-my\.sharepoint\.com/[^\s]+'
     ]
     
@@ -85,10 +85,13 @@ class CloudLinkDetector:
         # Detect Dropbox links
         links.extend(self._detect_dropbox_links(email_body))
         
-        # Remove duplicates
+        # Remove duplicates and clean up trailing punctuation
         unique_links = []
         seen_urls = set()
         for link in links:
+            # Strip trailing punctuation (common when link is at end of sentence)
+            link['url'] = link['url'].rstrip('.,!?;:')
+            
             if link['url'] not in seen_urls:
                 unique_links.append(link)
                 seen_urls.add(link['url'])
@@ -174,6 +177,36 @@ class CloudLinkDetector:
         """Check if email body contains any cloud storage links"""
         links = self.detect_links(email_body)
         return len(links) > 0
+
+    def classify_link_safety(self, url: str) -> str:
+        """
+        Classify link safety: TRUSTED, VERIFIED, SUSPICIOUS
+        """
+        url_lower = url.lower()
+        
+        # Level 1: Trusted Tier-1 Cloud Providers
+        trusted_domains = [
+            'drive.google.com', 'docs.google.com', 'onedrive.live.com', 
+            '1drv.ms', 'sharepoint.com', 'dropbox.com'
+        ]
+        if any(dom in url_lower for dom in trusted_domains):
+            return "TRUSTED"
+            
+        # Level 2: Verified Transfer Services
+        verified_domains = [
+            'wetransfer.com', 'transfernow.net', 'iclouddot.com', 'box.com'
+        ]
+        if any(dom in url_lower for dom in verified_domains):
+            return "VERIFIED"
+            
+        # Level 3: High Risk (Shorteners or unknown redirection)
+        suspicious_domains = [
+            'tinyurl.com', 'bit.ly', 'cutt.ly', 't.co', 'goo.gl', 'buff.ly'
+        ]
+        if any(dom in url_lower for dom in suspicious_domains):
+            return "SUSPICIOUS"
+            
+        return "UNKNOWN"
 
 
 # Test function

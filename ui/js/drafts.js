@@ -1,6 +1,6 @@
 // RFQ Agent - Draft Email Management
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = window.location.origin;
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('[Drafts] Loading draft emails...');
@@ -9,18 +9,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadDrafts() {
     try {
-        const response = await fetch(`${API_BASE}/api/drafts`);
-        const data = await response.json();
-
-        if (data.success && data.drafts.length > 0) {
-            displayDrafts(data.drafts);
+        const response = await window.RFQAgentAPI.getDrafts();
+        if (response.success && response.drafts && response.drafts.length > 0) {
+            displayDrafts(response.drafts);
         } else {
-            // Show empty state (already in HTML)
             console.log('No drafts found');
         }
     } catch (error) {
         console.error('Error loading drafts:', error);
-        showToast('Failed to load drafts. Is the backend running?', 'error');
+        showToast('Failed to load drafts.', 'error');
     }
 }
 
@@ -169,25 +166,14 @@ async function saveDraft(draftId) {
         const body = card.querySelector('[data-field="body"]').textContent.trim();
 
         showLoading('Saving draft...');
-
-        const response = await fetch(`${API_BASE}/api/drafts/${draftId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ subject, body })
-        });
-
-        const data = await response.json();
-
+        const result = await window.RFQAgentAPI.updateDraft(draftId, { subject, body });
         hideLoading();
 
-        if (data.success) {
+        if (result.success) {
             showToast('Draft saved successfully!', 'success');
-            // Reload to update timestamp
             await loadDrafts();
         } else {
-            showToast('Failed to save draft', 'error');
+            showToast(result.error || 'Failed to save draft', 'error');
         }
     } catch (error) {
         hideLoading();
@@ -197,29 +183,18 @@ async function saveDraft(draftId) {
 }
 
 async function sendDraft(draftId) {
-    if (!confirm('Are you sure you want to send this email? This action cannot be undone.')) {
-        return;
-    }
+    if (!confirm('Are you sure you want to send this email?')) return;
 
     try {
         showLoading('Sending email...');
-
-        const response = await fetch(`${API_BASE}/api/drafts/${draftId}/send`, {
-            method: 'POST'
-        });
-
-        const data = await response.json();
-
+        const result = await window.RFQAgentAPI.sendDraft(draftId);
         hideLoading();
 
-        if (data.success) {
+        if (result.success) {
             showToast('Email sent successfully!', 'success');
-            // Remove from UI
-            setTimeout(() => {
-                loadDrafts();
-            }, 1500);
+            setTimeout(() => loadDrafts(), 1000);
         } else {
-            showToast('Failed to send email: ' + (data.detail || 'Unknown error'), 'error');
+            showToast(result.error || result.detail || 'Failed to send email', 'error');
         }
     } catch (error) {
         hideLoading();
@@ -229,26 +204,18 @@ async function sendDraft(draftId) {
 }
 
 async function deleteDraft(draftId) {
-    if (!confirm('Are you sure you want to delete this draft?')) {
-        return;
-    }
+    if (!confirm('Are you sure you want to delete this draft?')) return;
 
     try {
         showLoading('Deleting draft...');
-
-        const response = await fetch(`${API_BASE}/api/drafts/${draftId}`, {
-            method: 'DELETE'
-        });
-
-        const data = await response.json();
-
+        const result = await window.RFQAgentAPI.deleteDraft(draftId);
         hideLoading();
 
-        if (data.success) {
+        if (result.success) {
             showToast('Draft deleted', 'success');
             await loadDrafts();
         } else {
-            showToast('Failed to delete draft', 'error');
+            showToast(result.error || 'Failed to delete draft', 'error');
         }
     } catch (error) {
         hideLoading();
@@ -285,7 +252,8 @@ async function enhanceDraft(draftId) {
         const response = await fetch(`${API_BASE}/api/drafts/${draftId}/enhance`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('rfq_agent_token')}`
             },
             body: JSON.stringify({ instructions })
         });
@@ -335,7 +303,13 @@ function addEditListeners() {
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
 
-    const date = new Date(dateString);
+    // Ensure UTC interpretation if no offset is present
+    let normalized = dateString;
+    if (typeof dateString === 'string' && !dateString.includes('Z') && !dateString.includes('+')) {
+        normalized += 'Z';
+    }
+
+    const date = new Date(normalized);
 
     return date.toLocaleString('en-US', {
         month: 'short',

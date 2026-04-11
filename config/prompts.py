@@ -5,14 +5,14 @@ Prompt-based control for Pixtral LLM (NO fine-tuning)
 
 # Main RFQ Agent Identity
 RFQ_AGENT_SYSTEM_PROMPT = """
-You are an RFQ Agent for a Saudi Arabian construction company.
+You are a General Business Assistant and RFQ Specialist.
 
-YOUR ROLE: FRONT GATE - Capture, Organize, Hand Over
-- You detect tender-related emails
-- You classify documents into 8 categories
-- You extract basic metadata
-- You generate RFI drafts for missing documents
-- You create handover JSON for Tender Agent
+YOUR ROLE: Intelligent Front-Gate - Capture, Organize, and Assist
+- You detect actionable business emails (RFQs, Project Queries, Client Discussions)
+- You classify documents and attachments for easy retrieval
+- You extract metadata (deadlines, client info, technical trades)
+- You generate professional drafts and RFI follow-ups
+- You organize everything into project-based threads
 
 WHAT YOU NEVER DO:
 ❌ Extract BOQ details (that's Tender Agent's job)
@@ -46,7 +46,7 @@ CONTEXT:
 
 # Email Detection Prompt
 EMAIL_DETECTION_PROMPT_TEMPLATE = """
-Task: Classify if this email is tender-related.
+Task: Classify if this email is an actionable business correspondence (RFQ, Project Query, or Formal Request).
 
 Email Details:
 Subject: {subject}
@@ -55,22 +55,21 @@ Attachments: {attachments}
 Body (preview): {body_preview}
 
 Return JSON:
-{{
-    "is_tender": true/false,
+{
+    "is_tender": true/false,  // Set true if email is business-actionable
     "confidence": 0.0-1.0,
     "keywords_found": ["keyword1", "keyword2"],
-    "reasoning": "Brief explanation",
+    "reasoning": "Explain why this is or isn't a business priority",
     "action": "PROCEED" or "IGNORE"
-}}
+}
 
 Classification Rules:
-- Keywords (RFQ, Tender, ITT, RFP, BOQ, "Invitation to Tender", "Calculation", "Quote Search", "Bid") → is_tender: true
+- Primary Keywords (RFQ, Quote, Tender, "Inquiry", "Proposal", "BOQ", "Drawings", "Price Request", "Meeting Request") → is_tender: true
+- Context: If it mentions a specific product, service, site, or project → is_tender: true
 - Known clients (neom.com, aramco.com, etc.) → increase confidence
-- SENDER ALERT: Some legitimate tenders come from personal Gmail/Outlook accounts (e.g., small contractors or testing). If the subject is "Request for Quotation" or "Request for calculation" and there are ATTACHMENTS (especially ZIP files with drawings) → is_tender: true, regardless of sender address.
-- Attachments with construction keywords (e.g., .dwg, .pdf with "RFQ", .zip with drawings) → increase confidence
-- "Request for calculation" or "For calculation" WITH construction attachments → is_tender: true
-- NEGATIVE CONSTRAINTS: Strictly exclude: CRM trials (Zoho), subscription alerts (ClickUp, Replit, Loom), product updates (Gemini, Replit, Gmail), and general marketing. These are NOT tenders even if they mention "Agents" or "Apps". 
-- Meeting invites, HR emails → is_tender: false
+- SENDER ALERT: Some legitimate business requests come from personal accounts. If the content is professional and asks for a quote, information, or meeting, mark it as actionable.
+- CLOUD LINK DETECTION: Recognize sharepoint.com, onedrive.com, drive.google.com, dropbox.com, etc., as sources for project documents.
+- NEGATIVE CONSTRAINTS: Strictly exclude: CRM trials, automated password resets, generic newsletters, and obvious marketing. These are NOT actionable business emails.
 """
 
 # Document Classification Prompt
@@ -228,4 +227,96 @@ Requirements:
 - List all missing items clearly (e.g., as bullet points)
 - Professional and urgent tone
 - Use {company_name} and {current_date}
+"""
+
+# General Email Assistant
+GENERAL_EMAIL_ASSISTANT_PROMPT = """
+You are a highly capable AI Email Assistant. Your goal is to help categorize emails, draft professional replies, and filter out junk or spam.
+You strictly return valid JSON. Do not include markdown formatting or extra text outside the JSON.
+"""
+
+JUNK_FILTER_PROMPT = """
+Task: Classify if this email is an actionable business correspondence or junk/spam.
+
+Subject: {subject}
+Sender: {sender}
+Attachments: {attachments}
+Body (preview): {body_preview}
+
+CRITICAL: If the email mentions a specific project name (e.g. "Project Alpha"), technical materials, or is a direct reply to a business thread, it MUST be classified as ACTIONABLE.
+
+ACTIONABLE CORRESPONDENCE includes:
+- RFQs, ITTs, RFPs, or pricing requests.
+- Project-related discussions, construction materials, technical queries, or meeting requests.
+- Emails mentioning specific project names or site names.
+- Emails about BOQs, drawings, specifications, price lists, or technical documentation.
+- Human-to-human business communication and thread replies.
+
+JUNK/SPAM includes:
+- Marketing/Sales offers, newsletters, or generic advertisements.
+- Automated system notifications (password resets, login alerts).
+- Unsolicited spam or mass marketing.
+
+Return JSON:
+{{
+    "type": "ACTIONABLE" or "JUNK",
+    "is_junk": true or false,
+    "confidence": 0.0-1.0,
+    "reasoning": "Brief explanation"
+}}
+"""
+
+PROFESSIONAL_REPLY_PROMPT = """
+Task: Draft a professional, polite, and concise reply to the following email.
+
+Sender: {sender}
+Subject: {subject}
+Body: {body}
+Attachment summaries: {attachment_summary}
+
+Return JSON:
+{{
+    "subject": "Re: {subject}",
+    "body": "Professional draft reply..."
+}}
+
+SMART DETECTION RULES:
+- If the sender mentions "attached", "enclosed", "BOQ", or "specifications" but the 'Attachment summaries' provided to you is "None", you MUST politely mention in your reply that you noticed the attachments were missing and ask the sender to provide them.
+"""
+
+CATEGORY_SUGGESTION_PROMPT = """
+Task: Suggest 2-3 professional categories (tags) for this email.
+
+Subject: {subject}
+Body: {body}
+Attachment names: {attachment_names}
+
+GENERAL CATEGORIES TO CHOOSE FROM:
+- Urgent Priority (For tight deadlines or critical requests)
+- Meeting Request (For scheduling or sync-ups)
+- Client Inquiry (Initial questions or lead generation)
+- Project Management (Ongoing coordination)
+- Meeting Request (Scheduling, calls, zoom)
+- Financial (Invoices, payments, quotes)
+- Follow-up (Check-ins on previous threads)
+- Technical (Specs, drawings, engineering)
+- Urgent (Immediate action required)
+- HR/Legal (Contracts, hiring, forms)
+
+Return JSON:
+{{
+    "suggested_tags": ["Category1", "Category2"]
+}}
+"""
+
+ATTACHMENT_SUMMARY_PROMPT = """
+Task: Summarize the provided attachment text.
+
+Content preview (first 500 chars):
+{content_preview}
+
+Return JSON:
+{{
+    "summary": "Brief summary of the attachment contents."
+}}
 """

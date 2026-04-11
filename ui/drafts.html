@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RFQ Agent - Draft Emails</title>
+    <title>Draft Replies - Email Assistant</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,16 +17,17 @@
 
     <style>
         .layout {
-            display: flex;
             min-height: 100vh;
             background: var(--bg-light);
         }
 
         .main-content {
-            flex: 1;
+            /* flex: 1; */
             margin-left: 200px;
             margin-top: 64px;
             padding: var(--space-8);
+            min-width: 0;
+            box-sizing: border-box;
         }
 
         .page-header {
@@ -71,7 +72,7 @@
         }
 
         .draft-meta {
-            flex: 1;
+            /* flex: 1; */
         }
 
         .draft-type {
@@ -220,7 +221,7 @@
         }
 
         .ai-input {
-            flex: 1;
+            /* flex: 1; */
             padding: var(--space-2) var(--space-3);
             border: 1px solid #C4B5FD;
             border-radius: var(--radius-md);
@@ -304,19 +305,25 @@
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                 </svg>
-                RFQ Agent
+                Email Assistant
             </a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link">Dashboard</a></li>
-                <li><a href="tenders.html" class="nav-link">Applications</a></li>
+                <li><a href="calendar.html" class="nav-link">Calendar</a></li>
+                <li><a href="threads.html" class="nav-link">Threads</a></li>
                 <li><a href="settings.html" class="nav-link">Settings</a></li>
             </ul>
 
             <div class="flex items-center gap-4">
+                <div id="premiumStatus" class="badge"
+                    style="background: rgba(255, 122, 69, 0.1); border: 1px solid rgba(255, 122, 69, 0.2); color: var(--primary-orange); display: none;">
+                    <span class="status-indicator status-online pulse"></span>
+                    <span id="premiumStatusText">AI Indexing...</span>
+                </div>
                 <span class="badge badge-success">
                     <span class="status-indicator status-online"></span>
-                    System Online
+                    Online
                 </span>
             </div>
         </div>
@@ -339,16 +346,25 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="tenders.html" class="sidebar-link">
+                    <a href="calendar.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Calendar
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="threads.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
-                        Application Report
+                        Business Threads
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -369,21 +385,21 @@
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
-                        Draft Emails
+                        Draft Replies
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="documents.html" class="sidebar-link">
+                    <a href="attachments.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                            <polyline points="13 2 13 9 20 9"></polyline>
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                            </path>
                         </svg>
                         Documents
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="clients.html" class="sidebar-link">
+                    <a href="contacts.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -391,7 +407,7 @@
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        Clients
+                        Contacts
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -409,7 +425,7 @@
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                             </path>
                         </svg>
                         Settings
@@ -435,16 +451,17 @@
                         <path
                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    <div style="font-size: var(--text-lg); color: var(--text-primary); margin-bottom: 0.5rem;">No draft
-                        emails</div>
-                    <div style="font-size: var(--text-sm); color: var(--text-muted);">Agent-generated drafts will appear
-                        here</div>
+                    <div style="font-size: var(--text-lg); color: var(--text-primary); margin-bottom: 0.5rem;">No drafts
+                        available</div>
+                    <div style="font-size: var(--text-sm); color: var(--text-muted);">Smart replies will appear here
+                        when emails are analyzed</div>
                 </div>
             </div>
         </main>
     </div>
 
     <!-- JavaScript -->
+    <script src="js/auth.js"></script>
     <script src="js/api.js"></script>
     <script src="js/drafts.js"></script>
 </body>

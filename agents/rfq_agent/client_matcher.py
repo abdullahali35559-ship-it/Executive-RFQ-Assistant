@@ -49,7 +49,7 @@ class ClientMatcher:
                     else:
                         client.contact_emails = [email_sender]
                 session.commit()
-                print(f"✅ Found existing client: {client.client_name}")
+                print(f"DONE: Found existing client: {getattr(client, 'contact_name', 'Unknown')}")
                 return client
             
             # No match found, create new client
@@ -57,12 +57,12 @@ class ClientMatcher:
             email_domain = self._extract_domain(email_sender)
             
             new_client = Client(
-                client_name=client_name,
+                contact_name=client_name,
                 email_domain=email_domain,
                 contact_emails=[email_sender],
                 first_seen=datetime.utcnow(),
                 last_contact=datetime.utcnow(),
-                total_projects=0,
+                total_interactions=0,
                 meta_data={}
             )
             
@@ -70,7 +70,7 @@ class ClientMatcher:
             session.commit()
             session.refresh(new_client)
             
-            print(f"✅ Created new client: {client_name}")
+            print(f"DONE: Created new client: {client_name}")
             return new_client
             
         finally:
@@ -125,24 +125,28 @@ If you cannot determine the company name, use the email domain as the name.
                              email: str, 
                              session: Session) -> Optional[Client]:
         """
-        Match client by email domain
-        
-        Args:
-            email: Email address
-            session: Database session
-            
-        Returns:
-            Client object if found, None otherwise
+        Match client by email domain, but skip for public providers (Gmail, etc.)
         """
         domain = self._extract_domain(email)
         
-        # Try exact match first
-        client = session.query(Client).filter(
-            Client.email_domain == domain
-        ).first()
+        # List of common public providers that should NOT be matched by domain
+        PUBLIC_DOMAINS = [
+            'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 
+            'icloud.com', 'me.com', 'live.com', 'msn.com', 'aol.com',
+            'googlemail.com'
+        ]
         
-        if client:
-            return client
+        # If it's a public domain, DO NOT match by domain. Only match by exact email.
+        if domain not in PUBLIC_DOMAINS:
+            # Try exact domain match first
+            client = session.query(Client).filter(
+                Client.email_domain == domain
+            ).first()
+            
+            if client:
+                return client
+        
+        # If public domain OR no domain match, try matching by exact contact emails
         
         # Try matching by contact emails using any()
         # PostgreSQL ARRAY syntax: WHERE email = ANY(contact_emails)

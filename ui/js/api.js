@@ -1,7 +1,7 @@
 // RFQ Agent - API Client
 // Handles all communication with FastAPI backend
 
-const API_BASE_URL = 'http://localhost:8000';  // FastAPI server
+const API_BASE_URL = window.location.origin;  // FastAPI server
 
 class RFQAgentAPI {
     constructor() {
@@ -14,10 +14,16 @@ class RFQAgentAPI {
             const response = await fetch(`${this.baseURL}${endpoint}`, {
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': localStorage.getItem('rfq_agent_token') ? `Bearer ${localStorage.getItem('rfq_agent_token')}` : '',
                     ...options.headers
                 },
                 ...options
             });
+
+            if (response.status === 401) {
+                Auth.logout();
+                throw new Error('Unauthorized');
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -40,15 +46,15 @@ class RFQAgentAPI {
         return await this.request('/api/dashboard/stats');
     }
 
-    // Get all tenders
-    async getTenders(filters = {}) {
+    // Get all threads
+    async getThreads(filters = {}) {
         const params = new URLSearchParams(filters);
-        return await this.request(`/api/tenders?${params}`);
+        return await this.request(`/api/threads?${params}`);
     }
 
-    // Get single tender
-    async getTender(tenderId) {
-        return await this.request(`/api/tenders/${tenderId}`);
+    // Get single thread
+    async getThread(threadId) {
+        return await this.request(`/api/threads/${threadId}`);
     }
 
     // Trigger email processing
@@ -68,30 +74,25 @@ class RFQAgentAPI {
         return await this.request(`/api/activity?limit=${limit}`);
     }
 
-    // Get clients
-    async getClients() {
-        return await this.request('/api/clients');
+    // Get contacts
+    async getContacts() {
+        return await this.request('/api/contacts');
     }
 
-    // Get RFI drafts
-    async getRFIDrafts(tenderId = null) {
-        const endpoint = tenderId
-            ? `/api/rfis?tender_id=${tenderId}`
-            : '/api/rfis';
+    // Get attachments (all or for a specific thread)
+    async getAttachments(threadId = null) {
+        const endpoint = threadId
+            ? `/api/threads/${threadId}/attachments`
+            : '/api/attachments';
         return await this.request(endpoint);
-    }
-
-    // Get documents for a tender
-    async getDocuments(tenderId) {
-        return await this.request(`/api/tenders/${tenderId}/documents`);
     }
 
     // ===== DRAFT EMAIL METHODS =====
 
     // Get all drafts
-    async getDrafts(tenderId = null) {
-        const endpoint = tenderId
-            ? `/api/drafts?tender_id=${tenderId}`
+    async getDrafts(threadId = null) {
+        const endpoint = threadId
+            ? `/api/drafts?thread_id=${threadId}`
             : '/api/drafts';
         return await this.request(endpoint);
     }
@@ -109,8 +110,8 @@ class RFQAgentAPI {
         });
     }
 
-    async toggleDocumentCorrect(docId) {
-        return await this.request(`/api/documents/${docId}/toggle-correct`, {
+    async toggleAttachmentCorrect(attId) {
+        return await this.request(`/api/attachments/${attId}/toggle-correct`, {
             method: 'POST'
         });
     }
@@ -147,6 +148,11 @@ class RFQAgentAPI {
     // Get emails
     async getEmails(filters = {}) {
         const params = new URLSearchParams(filters);
+        // Map threadId filter if present
+        if (filters.tender_id) {
+            params.delete('tender_id');
+            params.append('thread_id', filters.tender_id);
+        }
         return await this.request(`/api/emails?${params}`);
     }
 
@@ -162,21 +168,51 @@ class RFQAgentAPI {
         });
     }
 
-    // Get single document
-    async getDocument(docId) {
-        return await this.request(`/api/documents/${docId}`);
+    // Get single attachment
+    async getAttachment(attId) {
+        return await this.request(`/api/attachments/${attId}`);
     }
 
-    // Delete document
-    async deleteDocument(docId) {
-        return await this.request(`/api/documents/${docId}`, {
+    // Delete attachment
+    async deleteAttachment(attId) {
+        return await this.request(`/api/attachments/${attId}`, {
             method: 'DELETE'
         });
     }
 
-    // Get single client
-    async getClient(clientId) {
-        return await this.request(`/api/clients/${clientId}`);
+    // Get single contact
+    async getContact(contactId) {
+        return await this.request(`/api/contacts/${contactId}`);
+    }
+
+    // Tag management
+    async getTags() {
+        return await this.request('/api/tags');
+    }
+
+    async createTag(name, color) {
+        return await this.request('/api/tags', {
+            method: 'POST',
+            body: JSON.stringify({ name, color })
+        });
+    }
+
+    async deleteTag(tagId) {
+        return await this.request(`/api/tags/${tagId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async addTagToEmail(emailId, tagId) {
+        return await this.request(`/api/emails/${emailId}/tags/${tagId}`, {
+            method: 'POST'
+        });
+    }
+
+    async removeTagFromEmail(emailId, tagId) {
+        return await this.request(`/api/emails/${emailId}/tags/${tagId}`, {
+            method: 'DELETE'
+        });
     }
 
     // AI Assistant
@@ -234,6 +270,60 @@ class RFQAgentAPI {
     // OAuth status
     async getOAuthStatus() {
         return await this.request('/api/oauth/status');
+    }
+
+    // ===== CALENDAR METHODS =====
+    async getCalendarEvents(days = 7) {
+        return await this.request(`/api/calendar/events?days=${days}`);
+    }
+
+    async createCalendarEvent(data) {
+        return await this.request('/api/calendar/events', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async deleteCalendarEvent(provider, eventId) {
+        return await this.request(`/api/calendar/events/${provider}/${eventId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // ===== FOLLOW-UP ASSISTANT METHODS =====
+    async getFollowups() {
+        return await this.request('/api/followups');
+    }
+
+    async approveFollowup(taskId) {
+        return await this.request(`/api/followups/${taskId}/approve`, {
+            method: 'POST'
+        });
+    }
+
+    async dismissFollowup(taskId) {
+        return await this.request(`/api/followups/${taskId}/dismiss`, {
+            method: 'POST'
+        });
+    }
+
+    async bookSuggestedMeeting(threadId, provider = 'google') {
+        return await this.request('/api/meetings/book-suggested', {
+            method: 'POST',
+            body: JSON.stringify({ thread_id: threadId, provider })
+        });
+    }
+
+    async getTasks() {
+        return await this.request('/api/tasks');
+    }
+
+    async getMorningBrief() {
+        return await this.request('/api/morning-brief');
+    }
+
+    async getContactIntelligence(contactId) {
+        return await this.request(`/api/contacts/${contactId}/intelligence`);
     }
 }
 

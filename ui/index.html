@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RFQ Agent - Dashboard</title>
+    <title>RFI Assistant - Dashboard</title>
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%23FF5C35%22/><text y=%22.9em%22 font-size=%2280%22 x=%2250%25%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22serif%22 font-weight=%22bold%22>R</text></svg>">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,13 +19,11 @@
 
     <style>
         .layout {
-            display: flex;
             min-height: 100vh;
             background: var(--bg-light);
         }
 
         .main-content {
-            flex: 1;
             margin-left: 200px;
             margin-top: 64px;
             padding: var(--space-8);
@@ -151,6 +151,28 @@
         }
 
 
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0;
+            }
+        }
+
         @media (max-width: 1024px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -184,19 +206,34 @@
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                 </svg>
-                RFQ Agent
+                RFI Assistant
             </a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link active">Dashboard</a></li>
-                <li><a href="tenders.html" class="nav-link">Applications</a></li>
-                <li><a href="settings.html" class="nav-link">Settings</a></li>
+                <li><a href="calendar.html" class="nav-link">Calendar</a></li>
+                <li><a href="threads.html" class="nav-link">Threads</a></li>
+                <li><a href="settings.html" class="nav-link" style="display: flex; align-items: center; gap: 4px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                        Settings
+                    </a></li>
             </ul>
 
             <div class="flex items-center gap-4">
+                <div id="premiumStatus" class="badge"
+                    style="background: rgba(255, 122, 69, 0.1); border: 1px solid rgba(255, 122, 69, 0.2); color: var(--primary-orange); display: none;">
+                    <span class="status-indicator status-online pulse"></span>
+                    <span id="premiumStatusText">AI Indexing...</span>
+                </div>
                 <span class="badge badge-success">
                     <span class="status-indicator status-online"></span>
-                    System Online
+                    Online
                 </span>
             </div>
         </div>
@@ -219,16 +256,25 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="tenders.html" class="sidebar-link">
+                    <a href="calendar.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Calendar
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="threads.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
-                        Application Report
+                        Business Threads
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -249,21 +295,21 @@
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
-                        Draft Emails
+                        Draft Replies
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="documents.html" class="sidebar-link">
+                    <a href="attachments.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                            <polyline points="13 2 13 9 20 9"></polyline>
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                            </path>
                         </svg>
                         Documents
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="clients.html" class="sidebar-link">
+                    <a href="contacts.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -271,7 +317,7 @@
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        Clients
+                        Contacts
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -280,7 +326,7 @@
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                         </svg>
-                        AI Assistant
+                        RFI Assistant
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -301,145 +347,213 @@
         <!-- Main Content -->
         <main class="main-content">
             <!-- Page Header -->
-            <div class="page-header">
-                <h1 class="page-title">Dashboard</h1>
-                <p class="page-subtitle">Welcome to RFQ Agent - Intelligent Tender Management System</p>
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <h1 class="page-title">Executive Overview</h1>
+                    <p class="page-subtitle" id="welcomeMessage">Good afternoon, Abdullah. Here is your priority list
+                        for today.</p>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button id="btnSyncAll" class="btn btn-primary" onclick="triggerSync()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" style="margin-right: 8px;">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38" />
+                        </svg>
+                        <span>Sync Intelligence</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='assistant.html'">
+                        Ask RFI Assistant
+                    </button>
+                </div>
             </div>
 
-            <!-- Stats Grid -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Active Applications</div>
-                    <div class="stat-value" id="activeTenders">0</div>
-                    <div class="stat-change positive" id="activeTendersStatus">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            style="margin-right: 2px;">
-                            <polyline points="18 15 12 9 6 15"></polyline>
-                        </svg>
-                        Up to date
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-label">Total Emails</div>
-                    <div class="stat-value" id="unreadEmails">0</div>
-                    <div class="stat-change neutral" id="unreadEmailsStatus">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                        Checking...
-                    </div>
-                </div>
-
-                <div class="stat-card" onclick="window.location.href='drafts.html'" style="cursor: pointer;">
-                    <div class="stat-label">Pending RFIs</div>
-                    <div class="stat-value" id="pendingRFIs">0</div>
-                    <div class="stat-change">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
-                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+            <!-- Morning Brief Banner -->
+            <div id="morningBriefContainer" style="display: none; margin-bottom: var(--space-8);">
+                <div
+                    style="background: linear-gradient(135deg, #FFF4F0 0%, #FFFFFF 100%); border: 1px solid var(--primary-orange); border-left: 6px solid var(--primary-orange); border-radius: var(--radius-lg); padding: 20px; display: flex; align-items: center; gap: 20px; box-shadow: var(--shadow-sm);">
+                    <div
+                        style="background: var(--primary-orange); width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <path
+                                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41">
                             </path>
-                            <polyline points="22,6 12,13 2,6"></polyline>
                         </svg>
-                        Draft emails
                     </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem; margin-bottom: 4px;">
+                            Executive Morning Brief</div>
+                        <div id="morningBriefText"
+                            style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                            Good morning, Abdullah. Loading your priority intelligence...
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm"
+                        onclick="this.parentElement.parentElement.style.display='none'">Dismiss</button>
                 </div>
+            </div>
 
-                <div class="stat-card">
-                    <div class="stat-label">Total Clients</div>
-                    <div class="stat-value" id="totalClients">0</div>
-                    <div class="stat-change positive">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            style="margin-right: 2px;">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        Connected
+            <!-- Minimalist Sync Progress -->
+            <div id="syncProgressContainer" style="display: none; margin-bottom: var(--space-8);">
+                <div
+                    style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-sm);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span
+                            style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; text-transform: uppercase;">Sync
+                            Intelligence</span>
+                        <span id="syncPercentLabel"
+                            style="font-weight: 800; color: var(--primary-orange); font-size: 1.2rem;">0%</span>
+                    </div>
+                    <div
+                        style="height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; position: relative;">
+                        <div id="syncProgressBar"
+                            style="width: 0%; height: 100%; background: var(--primary-orange); transition: width 0.4s ease;">
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions">
-                <div class="action-card" onclick="processEmails()">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path
-                                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
+            <!-- Dashboard Grid -->
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-8);">
+
+                <!-- Center Column: Key Priorities -->
+                <div style="display: flex; flex-direction: column; gap: var(--space-8);">
+
+                    <!-- High Priority Communications -->
+                    <div class="recent-activity" style="border-top: 4px solid #f44336;">
+                        <div class="card-header">
+                            <h2 class="card-title">Action Required</h2>
+                        </div>
+                        <div id="priorityList">
+                            <!-- Populated via JS -->
+                            <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                <p>No immediate actions required. You are up to date! 🎉</p>
+                            </div>
+                        </div>
+                        <div
+                            style="padding: var(--space-4); text-align: center; border-top: 1px solid var(--border-light);">
+                            <a href="threads.html"
+                                style="color: var(--primary-orange); font-size: 0.85rem; font-weight: 600;">View All
+                                Business Threads</a>
+                        </div>
                     </div>
-                    <div class="action-content">
-                        <h3>Process Emails</h3>
-                        <p>Check for new RFQ emails and process attachments</p>
+
+                    <!-- Pending Drafts -->
+                    <div class="recent-activity" style="border-top: 4px solid var(--primary-orange);">
+                        <div class="card-header">
+                            <h2 class="card-title">Drafts Awaiting Approval</h2>
+                        </div>
+                        <div id="pendingDraftsList">
+                            <!-- Populated via JS -->
+                        </div>
+                        <div
+                            style="padding: var(--space-4); text-align: center; border-top: 1px solid var(--border-light);">
+                            <a href="drafts.html"
+                                style="color: var(--primary-orange); font-size: 0.85rem; font-weight: 600;">Manage
+                                Drafts</a>
+                        </div>
+                    </div>
+
+                    <!-- Follow-up Assistant -->
+                    <div class="recent-activity" style="border-top: 4px solid #9c27b0;">
+                        <div class="card-header"
+                            style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 class="card-title">Follow-up Assistant</h2>
+                                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 2px 0 0;">Threads with
+                                    no reply after 3 days</p>
+                            </div>
+                            <span class="badge" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;"
+                                id="followupCountBadge">0 Pending</span>
+                        </div>
+                        <div id="followupList">
+                            <!-- Populated via JS -->
+                            <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                <p>Checking for stale threads...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="action-card" onclick="viewTenders()">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path
-                                d="M9 12h6M9 16h6M7 8h10M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div class="action-content">
-                        <h3>View Application Report</h3>
-                        <p>Browse and manage all processed applications</p>
-                    </div>
-                </div>
+                <!-- Right Column: Time Management -->
+                <div style="display: flex; flex-direction: column; gap: var(--space-8);">
 
-                <div class="action-card" onclick="checkSystem()">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                    <!-- AI To-Do List (New Fyxer Feature) -->
+                    <div class="recent-activity" style="border-top: 4px solid #9c27b0; margin-bottom: var(--space-8);">
+                        <div class="card-header">
+                            <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9c27b0"
+                                    stroke-width="2">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                Proactive Tasks
+                            </h2>
+                        </div>
+                        <div id="aiTaskList">
+                            <div
+                                style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.8rem;">
+                                No action items identified from recent emails.
+                            </div>
+                        </div>
                     </div>
-                    <div class="action-content">
-                        <h3>System Status</h3>
-                        <p>Check database, and email connections</p>
-                    </div>
-                </div>
 
-                <div class="action-card" onclick="openSettings()">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path
-                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
+                    <!-- Agenda Widget -->
+                    <div class="recent-activity" style="border-top: 4px solid #4CAF50;">
+                        <div class="card-header">
+                            <h2 class="card-title">Today's Agenda</h2>
+                        </div>
+                        <div id="agendaWidgetList">
+                            <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                <p style="font-size: 0.85rem;">No meetings scheduled for today.</p>
+                                <button class="btn btn-secondary btn-sm"
+                                    onclick="window.location.href='calendar.html'">Full Calendar</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="action-content">
-                        <h3>Settings</h3>
-                        <p>Configure email providers and system settings</p>
-                    </div>
-                </div>
 
-            <!-- Agent Progress Panel (Hidden by default) -->
-            <div id="progressPanel" class="recent-activity" style="display: none; margin-bottom: var(--space-8); border-color: var(--primary-orange); background: #FFF9F6;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 class="card-title" style="display: flex; align-items: center; gap: 8px; color: var(--primary-orange);">
-                        <div class="spinner-small"></div>
-                        <span id="progressTitleText">Agent Processing in Progress...</span>
-                    </h2>
-                    <span id="progressPercent" style="font-weight: 700; color: var(--primary-orange);">0%</span>
-                </div>
-                <div style="padding: 0 var(--space-6) var(--space-6);">
-                    <div class="progress-bar-container" style="height: 10px; background: #EEE; border-radius: 5px; overflow: hidden; margin-bottom: 12px;">
-                        <div id="progressBar" style="height: 100%; width: 0%; background: var(--primary-orange); transition: width 0.5s ease;"></div>
-                    </div>
-                    <div id="progressStatus" style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">Initializing...</div>
-                    <div id="progressLogs" style="margin-top: 12px; max-height: 120px; overflow-y: auto; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6;">
-                        <!-- Logs will appear here -->
-                    </div>
-                </div>
-            </div>
+                    <!-- Executive Stats (Small) -->
+                    <div class="recent-activity">
+                        <div class="card-header">
+                            <h2 class="card-title">Pulse Check</h2>
+                        </div>
+                        <div style="padding: 0 var(--space-6) var(--space-6);">
+                            <div
+                                style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 0.85rem;">
+                                <span style="color: var(--text-muted);">Weekly Efficiency</span>
+                                <span style="font-weight: 700;">94%</span>
+                            </div>
+                            <div
+                                style="height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-bottom: 20px;">
+                                <div style="height: 100%; width: 94%; background: #4CAF50;"></div>
+                            </div>
 
-            <!-- Session Summary Widget -->
-            <div class="recent-activity">
-                <div class="card-header" style="margin-bottom:0;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div
+                                    style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;">
+                                    <div
+                                        style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">
+                                        Emails Pulled</div>
+                                    <div style="font-size: 1.1rem; font-weight: 700;" id="totalPulledNum">0</div>
+                                </div>
+                                <div
+                                    style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;">
+                                    <div
+                                        style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">
+                                        Meetings Today</div>
+                                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--primary-orange);"
+                                        id="totalMeetingsNum">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> <!-- End of Right Column -->
+
+            </div> <!-- End of Dashboard Grid -->
+
+            <!-- Processing Session Summary (Moved inside main-content) -->
+            <div class="recent-activity" style="margin-top: var(--space-8);">
+                <div class="card-header" style="margin-bottom:0; border-bottom: none;">
                     <div>
                         <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
                             <svg width="18" height="18" fill="none" stroke="var(--primary-orange)" stroke-width="2"
@@ -450,7 +564,7 @@
                             Processing Session Summary
                         </h2>
                         <p style="font-size:0.8rem;color:var(--text-muted);margin:2px 0 0;">View all emails &amp;
-                            tenders processed within a time window</p>
+                            threads processed within a time window</p>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px;">
@@ -490,6 +604,7 @@
     </div>
 
     <!-- JavaScript -->
+    <script src="js/auth.js"></script>
     <script src="js/api.js"></script>
     <script>
         function showToast(message, type = 'info') {
@@ -536,7 +651,76 @@
         }
 
         // Initialize API client
+        window.addEventListener('load', () => {
+            // Initial load
+            if (window.loadDashboardData) window.loadDashboardData();
+
+            // Set polling for dashboard stats (every 30 seconds)
+            setInterval(() => {
+                console.log('Refreshing dashboard stats...');
+                if (window.loadDashboardData) window.loadDashboardData();
+            }, 30000);
+        });
+        // Fail-safe close function
+        function closeBookingModal() {
+            const modal = document.getElementById('bookingModal');
+            if (modal) modal.classList.remove('active');
+            // Also reset fields
+            ['bookingTitle', 'bookingAttendees', 'bookingDate', 'bookingTime'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+        }
     </script>
+    <!-- Add Meeting Modal -->
+    <div id="bookingModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Confirm AI Meeting Suggestion</h2>
+                <button class="modal-close"
+                    onclick="closeBookingModal(); document.getElementById('bookingModal').classList.remove('active');">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 24px;">
+                <form id="bookingForm" onsubmit="handleBookingSubmit(event)">
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">Meeting Title</label>
+                        <input type="text" id="bookingTitle" class="form-input" required
+                            placeholder="e.g. Project Discovery Call">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">Attendees (Emails)</label>
+                        <input type="text" id="bookingAttendees" class="form-input" required
+                            placeholder="client@example.com">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">Date</label>
+                            <input type="date" id="bookingDate" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Time</label>
+                            <input type="time" id="bookingTime" class="form-input" required>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 24px;">
+                        <label class="form-label">Calendar Provider</label>
+                        <select id="bookingProvider" class="form-select">
+                            <option value="google">Google Calendar</option>
+                            <option value="outlook">Outlook / Teams</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button type="submit" id="btnConfirmBooking" class="btn btn-primary" style="flex: 1;">Create
+                            Meeting</button>
+                        <button type="button" class="btn btn-secondary"
+                            onclick="closeBookingModal(); document.getElementById('bookingModal').classList.remove('active');"
+                            style="flex: 1;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="js/dashboard.js"></script>
 </body>
 

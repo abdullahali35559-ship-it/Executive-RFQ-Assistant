@@ -48,7 +48,7 @@ class DraftManager:
                 
                 # Create credentials
                 creds = Credentials(
-                    token=token_data.get('access_token'),
+                    token=token_data.get('token') or token_data.get('access_token'),
                     refresh_token=token_data.get('refresh_token'),
                     token_uri='https://oauth2.googleapis.com/token',
                     client_id=os.getenv('GMAIL_CLIENT_ID'),

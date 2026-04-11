@@ -1,35 +1,53 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ARRAY, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ARRAY, Text, ForeignKey, Table
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
 
-class Client(Base):
-    __tablename__ = 'clients'
+# Association table for Many-to-Many relationship between Email and Tag
+email_tags = Table(
+    'email_tags',
+    Base.metadata,
+    Column('email_id', Integer, ForeignKey('emails.id'), primary_key=True),
+    Column('tag_id', Integer, ForeignKey('tags.id'), primary_key=True)
+)
+
+# Association table for Many-to-Many relationship between Thread and Tag
+thread_tags = Table(
+    'thread_tags',
+    Base.metadata,
+    Column('thread_id', Integer, ForeignKey('threads.id'), primary_key=True),
+    Column('tag_id', Integer, ForeignKey('tags.id'), primary_key=True)
+)
+
+class Contact(Base):
+    """Formerly Client"""
+    __tablename__ = 'contacts'
     
     id = Column(Integer, primary_key=True)
-    client_name = Column(String(255), nullable=False)
+    contact_name = Column(String(255), nullable=False)
     email_domain = Column(String(100))
     contact_emails = Column(ARRAY(Text))
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_contact = Column(DateTime)
-    total_projects = Column(Integer, default=0)
+    total_interactions = Column(Integer, default=0)
     meta_data = Column(JSONB)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    projects = relationship('Project', back_populates='client')
-    tenders = relationship('Tender', back_populates='client')
+    topics = relationship('Topic', back_populates='contact')
+    threads = relationship('Thread', back_populates='contact')
 
-class Project(Base):
-    __tablename__ = 'projects'
+class Topic(Base):
+    """Formerly Project"""
+    __tablename__ = 'topics'
     
     id = Column(Integer, primary_key=True)
-    client_id = Column(Integer, ForeignKey('clients.id'), nullable=False)
-    project_name = Column(String(255))
-    project_reference = Column(String(100))
-    tender_id = Column(String(50), unique=True)
+    contact_id = Column(Integer, ForeignKey('contacts.id'), nullable=False)
+    topic_name = Column(String(255))
+    topic_reference = Column(String(100))
+    thread_id = Column(String(50), unique=True)
     status = Column(String(50), default='ACTIVE')
     folder_path = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -37,29 +55,39 @@ class Project(Base):
     meta_data = Column(JSONB)
     
     # Relationships
-    client = relationship('Client', back_populates='projects')
-    tenders = relationship('Tender', back_populates='project')
+    contact = relationship('Contact', back_populates='topics')
+    threads = relationship('Thread', back_populates='topic')
 
-class Tender(Base):
-    __tablename__ = 'tenders'
+class Tag(Base):
+    """New Category/Tag Model"""
+    __tablename__ = 'tags'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50), unique=True, nullable=False)
+    name = Column(String(50), unique=True, nullable=False)
+    color = Column(String(20), default='#6366f1') # Default indigo
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    emails = relationship('Email', secondary=email_tags, back_populates='tags')
+    threads = relationship('Thread', secondary=thread_tags, back_populates='tags')
+
+class Thread(Base):
+    """Formerly Tender"""
+    __tablename__ = 'threads'
+    
+    id = Column(Integer, primary_key=True)
+    thread_id = Column(String(50), unique=True, nullable=False)
     status = Column(String(50), nullable=False, default='PROCESSING')
     
     # Foreign Keys
-    client_id = Column(Integer, ForeignKey('clients.id'))
-    project_id = Column(Integer, ForeignKey('projects.id'))
+    contact_id = Column(Integer, ForeignKey('contacts.id'))
+    topic_id = Column(Integer, ForeignKey('topics.id'))
     
-    # Legacy fields (kept for backward compatibility)
-    client_name = Column(String(255))
-    project_name = Column(String(255))
-    tender_reference = Column(String(100))
-    submission_deadline = Column(DateTime(timezone=True))
-    rfi_deadline = Column(DateTime(timezone=True))
-    location = Column(String(255), default='Saudi Arabia')
-    trade = Column(String(100))
-    current_agent = Column(String(50), default='RFQ_AGENT')
+    # Details
+    subject = Column(Text)
+    contact_name = Column(String(255))
+    topic_name = Column(String(255))
+    thread_reference = Column(String(100))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     source = Column(String(50))
@@ -67,75 +95,62 @@ class Tender(Base):
     source_sender = Column(String(255))
     
     # Relationships
-    client = relationship('Client', back_populates='tenders')
-    project = relationship('Project', back_populates='tenders')
+    contact = relationship('Contact', back_populates='threads')
+    topic = relationship('Topic', back_populates='threads')
+    tags = relationship('Tag', secondary=thread_tags, back_populates='threads')
 
 class Email(Base):
     __tablename__ = 'emails'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
+    thread_id = Column(String(50)) # Link to Thread.thread_id
     email_id = Column(String(255), unique=True)
     subject = Column(Text)
     sender = Column(String(255))
     recipients = Column(ARRAY(Text))
     body = Column(Text)
     received_at = Column(DateTime(timezone=True))
-    is_tender = Column(Boolean)
+    is_actionable = Column(Boolean, default=True)
+    is_junk = Column(Boolean, default=False)
+    is_sent = Column(Boolean, default=False) # New: Track outgoing mail
     detection_confidence = Column(Float)
-    keywords_found = Column(ARRAY(Text))
+    tags_suggested = Column(ARRAY(Text))
     processed = Column(Boolean, default=False)
+    meta_data = Column(JSONB) # New: Store meeting details, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    tags = relationship('Tag', secondary=email_tags, back_populates='emails')
 
-class Document(Base):
-    __tablename__ = 'documents'
+class Attachment(Base):
+    """Formerly Document"""
+    __tablename__ = 'attachments'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
+    thread_id = Column(String(50))
+    category = Column(String(100)) # e.g. "01_Instructions", "02_Scope_of_Work"
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
     file_path = Column(Text, nullable=False)
     file_hash = Column(String(64), nullable=False)
     file_size_bytes = Column(Integer)
-    category = Column(String(50))
-    classification_confidence = Column(Float)
-    mime_type = Column(String(100))
-    is_read_only = Column(Boolean, default=True)
+    doc_type = Column(String(50)) # e.g. "Invoice", "Contract", "Image"
+    summary = Column(Text)
     is_correct = Column(Boolean, default=True)
-    rejection_reason = Column(Text)
     version = Column(Integer, default=1)
-    is_addendum = Column(Boolean, default=False)
-    
-    # Version tracking
-    previous_version_id = Column(Integer, ForeignKey('documents.id'))
-    version_reason = Column(Text)
-    replaced_at = Column(DateTime)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
-    classified_by = Column(String(50), default='RFQ_AGENT')
     source = Column(String(50))
 
-class RFIDraft(Base):
-    __tablename__ = 'rfi_drafts'
-    
-    id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
-    rfi_id = Column(String(50))
-    category = Column(String(50))
-    missing_item = Column(String(255))
-    draft_subject = Column(Text)
-    draft_body = Column(Text)
-    priority = Column(String(20))
-    status = Column(String(50), default='DRAFT')
-    created_by = Column(String(50), default='RFQ_AGENT')
-    created_at = Column(DateTime, default=datetime.utcnow)
-    sent_at = Column(DateTime)
+# Aliases for backward compatibility
+Document = Attachment
 
-class DraftEmail(Base):
-    __tablename__ = 'draft_emails'
+class DraftReply(Base):
+    """Formerly DraftEmail / RFIDraft"""
+    __tablename__ = 'draft_replies'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
-    draft_type = Column(String(50))  # 'RFI', 'RESPONSE', 'ACKNOWLEDGMENT'
+    thread_id = Column(String(50))
+    draft_type = Column(String(50))  # 'REPLY', 'CLARIFICATION', 'ACKNOWLEDGMENT'
     
     # Email details
     recipient = Column(String(255), nullable=False)
@@ -148,48 +163,37 @@ class DraftEmail(Base):
     
     # Status and metadata
     status = Column(String(50), default='DRAFT')  # 'DRAFT', 'SENT', 'DELETED'
-    created_by = Column(String(50), default='RFQ_AGENT')
+    created_by = Column(String(50), default='GENERAL_EMAIL_ASSISTANT')
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     sent_at = Column(DateTime)
     
     # Link to original email
     in_reply_to_email_id = Column(String(255))
+    scheduled_at = Column(DateTime) # For future "Send Later" feature
 
-class FileLink(Base):
-    __tablename__ = 'file_links'
+class FollowupTask(Base):
+    """New: Track threads that need following up"""
+    __tablename__ = 'followup_tasks'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
-    link_url = Column(Text, nullable=False)
-    link_type = Column(String(50))
-    download_status = Column(String(50))
-    downloaded_filename = Column(String(255))
-    error_message = Column(Text)
+    thread_id = Column(String(50), ForeignKey('threads.thread_id'))
+    original_email_id = Column(String(255)) # ID of the sent email we are following up on
+    recipient = Column(String(255))
+    suggested_body = Column(Text)
+    status = Column(String(50), default='PENDING') # PENDING, ACTIONED, IGNORED
+    due_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-class AgentHandover(Base):
-    __tablename__ = 'agent_handovers'
-    
-    id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
-    from_agent = Column(String(50), nullable=False)
-    to_agent = Column(String(50), nullable=False)
-    handover_data = Column(JSONB, nullable=False)
-    status = Column(String(50))
-    approved_by = Column(String(100))
-    approved_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class AuditLog(Base):
     __tablename__ = 'audit_log'
     
     id = Column(Integer, primary_key=True)
-    tender_id = Column(String(50))
-    agent = Column(String(50))
+    thread_id = Column(String(50))
+    agent = Column(String(50)) # GENERAL_EMAIL_ASSISTANT
     action = Column(String(100))
     details = Column(JSONB)
-    user_id = Column(String(100))
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 class AssistantConversation(Base):
@@ -205,6 +209,13 @@ class AssistantChat(Base):
     
     id = Column(Integer, primary_key=True)
     conversation_id = Column(Integer, ForeignKey('assistant_conversations.id'), nullable=True)
-    role = Column(String(20), nullable=False) # 'user' or 'assistant'
+    role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+# Aliases for backward compatibility with RFQ Agent code base
+Tender = Thread
+DraftEmail = DraftReply
+Client = Contact
+Project = Topic
+RFIDraft = DraftReply

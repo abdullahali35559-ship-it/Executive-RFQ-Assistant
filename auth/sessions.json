@@ -1,0 +1,12 @@
+[
+  {
+    "username": "admin",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc3NTk2NDIwNX0.AbY-asSwaxCkbieETQ78qqfQfw2Bo_n-gk2aRn2cqMU",
+    "expires_at": 1775982205.7173269
+  },
+  {
+    "username": "admin",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc3NTk4Mjg4NX0.xkfD3vxYrYtdE5jnTXLx_OeJ9L3B5fe1aXqTID_Qh3Q",
+    "expires_at": 1776000885.9497852
+  }
+]

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "D:\rfi_vps_version\api\main.py", line 1534, in <module>
+    from scripts.process_emails import process_email_batch
+  File "D:\rfi_vps_version\scripts\process_emails.py", line 6, in <module>
+    from scripts.run_rfq_agent import process_incoming_email, log_progress
+  File "D:\rfi_vps_version\scripts\run_rfq_agent.py", line 11, in <module>
+    from agents.rfq_agent.file_manager import FileManager, generate_tender_id
+  File "D:\rfi_vps_version\agents\rfq_agent\file_manager.py", line 6, in <module>
+    from agents.rfq_agent.document_versioner import DocumentVersioner
+  File "D:\rfi_vps_version\agents\rfq_agent\document_versioner.py", line 8, in <module>
+    from database.models import Document
+ImportError: cannot import name 'Document' from 'database.models' (D:\rfi_vps_version\database\models.py)

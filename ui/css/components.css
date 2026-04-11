@@ -768,3 +768,30 @@ tr:hover {
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
+
+/* Premium Status Pulse */
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 92, 53, 0.4); }
+    70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 92, 53, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 92, 53, 0); }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Scrollbar adjustment for a cleaner look */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
+}

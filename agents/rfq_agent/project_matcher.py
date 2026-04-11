@@ -42,7 +42,7 @@ class ProjectMatcher:
             
             # Get all projects for this client
             projects = session.query(Project).filter(
-                Project.client_id == client_id,
+                Project.contact_id == client_id,
                 Project.status == 'ACTIVE'
             ).all()
             
@@ -52,8 +52,8 @@ class ProjectMatcher:
             # Try exact reference match first
             if project_ref:
                 for project in projects:
-                    if project.project_reference and project_ref.lower() in project.project_reference.lower():
-                        print(f"✅ Matched project by reference: {project.project_name}")
+                    if project.topic_reference and project_ref.lower() in project.topic_reference.lower():
+                        print(f"DONE: Matched project by reference: {project.topic_name}")
                         return project
             
             # Use LLM for similarity matching
@@ -72,18 +72,18 @@ class ProjectMatcher:
             
             # If it's short and contains generic keywords, treat as generic
             if is_generic and len(clean_name) < 25:
-                print(f"⚠️ Subject '{project_name}' is too generic ({len(clean_name)} chars). Skipping similarity match.")
+                print(f"WARN: Subject '{project_name}' is too generic ({len(clean_name)} chars). Skipping similarity match.")
                 return None
 
             for project in projects:
                 similarity = self.calculate_similarity(
                     project_name,
-                    project.project_name or ""
+                    project.topic_name or ""
                 )
                 
                 # Higher threshold (0.9) for similarity to be safe
                 if similarity >= 0.9:  
-                    print(f"✅ Matched project by similarity ({similarity:.0%}): {project.project_name}")
+                    print(f"DONE: Matched project by similarity ({similarity:.0%}): {project.topic_name}")
                     return project
             
             return None
@@ -205,14 +205,14 @@ Consider:
             # Update client's project count
             client = session.query(Client).filter(Client.id == client_id).first()
             if client:
-                client.total_projects += 1
+                client.total_interactions += 1
             
             # Create project
             project = Project(
-                client_id=client_id,
-                project_name=project_name,
-                project_reference=project_reference,
-                tender_id=tender_id,
+                contact_id=client_id,
+                topic_name=project_name,
+                topic_reference=project_reference,
+                thread_id=tender_id,
                 status='ACTIVE',
                 folder_path=f"./storage/tenders/{tender_id}",
                 created_at=datetime.utcnow(),
@@ -224,7 +224,7 @@ Consider:
             session.commit()
             session.refresh(project)
             
-            print(f"✅ Created new project: {project_name}")
+            print(f"DONE: Created new project: {project_name}")
             return project
             
         finally:

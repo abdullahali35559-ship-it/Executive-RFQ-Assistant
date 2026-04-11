@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RFQ Agent - Settings</title>
+    <title>Settings - Email Assistant</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,16 +17,17 @@
 
     <style>
         .layout {
-            display: flex;
             min-height: 100vh;
             background: var(--bg-light);
         }
 
         .main-content {
-            flex: 1;
+            /* flex: 1; */
             margin-left: 200px;
             margin-top: 64px;
             padding: var(--space-8);
+            min-width: 0;
+            box-sizing: border-box;
         }
 
         .page-header {
@@ -124,19 +125,25 @@
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                 </svg>
-                RFQ Agent
+                Email Assistant
             </a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link">Dashboard</a></li>
-                <li><a href="tenders.html" class="nav-link">Applications</a></li>
+                <li><a href="calendar.html" class="nav-link">Calendar</a></li>
+                <li><a href="threads.html" class="nav-link">Threads</a></li>
                 <li><a href="settings.html" class="nav-link active">Settings</a></li>
             </ul>
 
             <div class="flex items-center gap-4">
-                <span class="badge badge-success">
-                    <span class="status-indicator status-online"></span>
-                    System Online
+                <div id="premiumStatus" class="badge"
+                    style="background: rgba(255, 122, 69, 0.1); border: 1px solid rgba(255, 122, 69, 0.2); color: var(--primary-orange); display: none;">
+                    <span class="status-indicator status-online pulse"></span>
+                    <span id="premiumStatusText">AI Indexing...</span>
+                </div>
+                <span class="badge" id="systemStatusBadge">
+                    <span class="status-indicator" id="systemStatusIndicator"></span>
+                    <span id="systemStatusText">Checking...</span>
                 </span>
             </div>
         </div>
@@ -159,16 +166,25 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="tenders.html" class="sidebar-link">
+                    <a href="calendar.html" class="sidebar-link">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Calendar
+                    </a>
+                </li>
+                <li class="sidebar-item">
+                    <a href="threads.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
-                        Application Report
+                        Business Threads
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -189,21 +205,21 @@
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
-                        Draft Emails
+                        Draft Replies
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="documents.html" class="sidebar-link">
+                    <a href="attachments.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                            <polyline points="13 2 13 9 20 9"></polyline>
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                            </path>
                         </svg>
                         Documents
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="clients.html" class="sidebar-link">
+                    <a href="contacts.html" class="sidebar-link">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -211,7 +227,7 @@
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        Clients
+                        Contacts
                     </a>
                 </li>
                 <li class="sidebar-item">
@@ -229,7 +245,7 @@
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                             </path>
                         </svg>
                         Settings
@@ -305,11 +321,104 @@
                 </div>
             </div>
 
+            <!-- Category & Tag Management -->
+            <div class="settings-section">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display: inline-block; vertical-align: middle; margin-right: 8px; margin-top: -2px;">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                        <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    </svg>
+                    Category & Tag Management
+                </h2>
+
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.875rem;">Create and manage tags
+                    for categorizing your business communications.</p>
+
+                <div
+                    style="display: flex; gap: 1rem; margin-bottom: 2rem; background: var(--bg-light); padding: 1.5rem; border-radius: var(--radius-md);">
+                    <div style="flex: 2;">
+                        <label class="form-label">Tag Name</label>
+                        <input type="text" id="newTagName" class="form-input"
+                            placeholder="e.g. Urgent, Inquiry, Invoice">
+                    </div>
+                    <div style="/* flex: 1; */">
+                        <label class="form-label">Color</label>
+                        <input type="color" id="newTagColor" class="form-input" value="#4F46E5"
+                            style="height: 42px; padding: 4px;">
+                    </div>
+                    <div style="flex: 0; align-self: flex-end;">
+                        <button class="btn btn-primary" onclick="createTag()">Add Tag</button>
+                    </div>
+                </div>
+
+                <div id="tagsContainer"
+                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+                    <!-- Tags will be loaded here -->
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted); grid-column: 1/-1;">
+                        Loading tags...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheduling Preferences -->
+            <div class="settings-section">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display: inline-block; vertical-align: middle; margin-right: 8px; margin-top: -2px;">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    Meeting & Scheduling Rules
+                </h2>
+
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.875rem;">Configure how the AI
+                    handles "Let's meet" requests and slot suggestions.</p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div>
+                        <label class="form-label">Working Hours (Start)</label>
+                        <input type="time" class="form-input" value="09:00">
+                    </div>
+                    <div>
+                        <label class="form-label">Working Hours (End)</label>
+                        <input type="time" class="form-input" value="18:00">
+                    </div>
+                    <div>
+                        <label class="form-label">Preferred Meeting Duration</label>
+                        <select class="form-select">
+                            <option value="30">30 Minutes</option>
+                            <option value="45">45 Minutes</option>
+                            <option value="60" selected>1 Hour</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Buffer Time Between Meetings</label>
+                        <select class="form-select">
+                            <option value="0">No Buffer</option>
+                            <option value="15" selected>15 Minutes</option>
+                            <option value="30">30 Minutes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+                    <button class="btn btn-primary"
+                        onclick="window.RFQAgentAPI.showToast('Scheduling rules updated', 'success')">Save
+                        Rules</button>
+                </div>
+            </div>
+
 
         </main>
     </div>
 
     <!-- JavaScript -->
+    <script src="js/auth.js"></script>
     <script src="js/api.js"></script>
     <script>
         const API_BASE = window.RFQAgentAPI.baseURL;
@@ -317,39 +426,72 @@
         async function configureGmail() {
             console.log('[Settings] Opening Gmail OAuth login flow...');
             try {
-                const response = await fetch(API_BASE + '/api/gmail/oauth/login');
-                const data = await response.json();
-                if (data.auth_url) {
-                    window.open(data.auth_url, '_blank');
+                const result = await window.RFQAgentAPI.request('/api/gmail/oauth/login');
+                if (result.auth_url) {
+                    window.open(result.auth_url, '_blank');
                 } else {
                     window.RFQAgentAPI.showToast('Could not get authentication URL', 'error');
                 }
             } catch (error) {
                 console.error('[Settings] Gmail OAuth Error:', error);
-                window.RFQAgentAPI.showToast('API Connection Error', 'error');
+                // Fallback if showToast not available on window.RFQAgentAPI
+                alert('API Connection Error');
             }
         }
 
         async function viewOutlookSettings() {
             console.log('[Settings] Opening Outlook OAuth login flow...');
             try {
-                const response = await fetch(API_BASE + '/api/oauth/login');
-                const data = await response.json();
-                if (data.auth_url) {
-                    window.open(data.auth_url, '_blank');
+                const result = await window.RFQAgentAPI.request('/api/oauth/login');
+                if (result.auth_url) {
+                    window.open(result.auth_url, '_blank');
                 } else {
-                    window.RFQAgentAPI.showToast('Could not get authentication URL', 'error');
+                    alert('Could not get authentication URL');
                 }
             } catch (error) {
                 console.error('[Settings] Outlook OAuth Error:', error);
-                window.RFQAgentAPI.showToast('API Connection Error', 'error');
+                alert('API Connection Error');
             }
         }
 
-        // Load OAuth status on page load
+        // Load OAuth status and Tags on page load
         document.addEventListener('DOMContentLoaded', async () => {
-            console.log('[Settings] Settings page loaded, checking OAuth status...');
+            console.log('[Settings] Settings page loaded, checking status...');
+            updateSystemStatus();
+            loadOAuthStatus();
+            loadTags();
 
+            // Poll system status every 30 seconds
+            setInterval(updateSystemStatus, 30000);
+        });
+
+        async function updateSystemStatus() {
+            try {
+                const response = await window.RFQAgentAPI.getAgentStatus();
+                const badge = document.getElementById('systemStatusBadge');
+                const indicator = document.getElementById('systemStatusIndicator');
+                const text = document.getElementById('systemStatusText');
+
+                if (response.status === 'idle' || response.status === 'processing') {
+                    badge.className = 'badge badge-success';
+                    indicator.className = 'status-indicator status-online';
+                    text.textContent = response.status === 'processing' ? 'Agent Processing' : 'System Online';
+                } else {
+                    badge.className = 'badge badge-warning';
+                    indicator.className = 'status-indicator status-offline';
+                    text.textContent = 'System Busy';
+                }
+            } catch (error) {
+                const badge = document.getElementById('systemStatusBadge');
+                const indicator = document.getElementById('systemStatusIndicator');
+                const text = document.getElementById('systemStatusText');
+                badge.className = 'badge badge-danger';
+                indicator.className = 'status-indicator status-offline';
+                text.textContent = 'System Offline';
+            }
+        }
+
+        async function loadOAuthStatus() {
             // ===== CHECK OUTLOOK STATUS =====
             try {
                 const outlookStatus = await window.RFQAgentAPI.getOAuthStatus();
@@ -384,14 +526,12 @@
 
             // ===== CHECK GMAIL STATUS =====
             try {
-                const gmailResponse = await fetch(API_BASE + '/api/gmail/oauth/status');
-                const gmailStatus = await gmailResponse.json();
+                const gmailStatus = await window.RFQAgentAPI.request('/api/gmail/oauth/status');
                 console.log('[Settings] Gmail OAuth Status:', gmailStatus);
 
                 const gmailStatusDot = document.getElementById('gmailStatus');
                 const gmailBtn = document.querySelector('button[onclick="configureGmail()"]');
 
-                // Gmail API returns {authenticated: true/false} format
                 if (gmailStatus.authenticated === true || gmailStatus.status === 'connected') {
                     gmailStatusDot.className = 'status-online-large';
                     if (gmailBtn) {
@@ -408,7 +548,84 @@
             } catch (error) {
                 console.error('[Settings] Could not fetch Gmail OAuth status:', error);
             }
-        });
+        }
+
+        async function loadTags() {
+            const container = document.getElementById('tagsContainer');
+            try {
+                const response = await window.RFQAgentAPI.getTags();
+                if (response.success) {
+                    const tags = response.data;
+                    if (tags.length === 0) {
+                        container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted); grid-column: 1/-1;">No tags created yet.</div>';
+                        return;
+                    }
+                    container.innerHTML = tags.map(tag => `
+                        <div style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1rem; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid ${tag.color};">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div style="font-weight: 600; color: var(--text-primary);">${tag.name}</div>
+                            </div>
+                            <button class="btn-icon" style="color: var(--accent-red); border: none; background: transparent;" onclick="deleteTag(${tag.id})">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading tags:', error);
+                container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--accent-red); grid-column: 1/-1;">Error loading tags.</div>';
+            }
+        }
+
+        async function createTag() {
+            const nameInput = document.getElementById('newTagName');
+            const colorInput = document.getElementById('newTagColor');
+            const name = nameInput.value.trim();
+            const color = colorInput.value;
+
+            if (!name) {
+                window.RFQAgentAPI.showToast('Please enter a tag name', 'error');
+                return;
+            }
+
+            try {
+                const result = await window.RFQAgentAPI.createTag(name, color);
+                if (result.success) {
+                    window.RFQAgentAPI.showToast('Tag created successfully', 'success');
+                    nameInput.value = '';
+                    loadTags();
+                } else {
+                    window.RFQAgentAPI.showToast(result.error || 'Failed to create tag', 'error');
+                }
+            } catch (error) {
+                console.error('Error creating tag:', error);
+                window.RFQAgentAPI.showToast('Error creating tag', 'error');
+            }
+        }
+
+        async function deleteTag(id) {
+            if (!confirm('Are you sure you want to delete this tag? It will be removed from all associated emails.')) {
+                return;
+            }
+
+            try {
+                const result = await window.RFQAgentAPI.deleteTag(id);
+                if (result.success) {
+                    window.RFQAgentAPI.showToast('Tag deleted', 'success');
+                    loadTags();
+                } else {
+                    window.RFQAgentAPI.showToast(result.error || 'Failed to delete tag', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting tag:', error);
+                window.RFQAgentAPI.showToast('Error deleting tag', 'error');
+            }
+        }
     </script>
 </body>
 

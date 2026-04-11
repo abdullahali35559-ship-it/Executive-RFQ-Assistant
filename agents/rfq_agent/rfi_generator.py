@@ -30,7 +30,7 @@ class RFIGenerator:
         try:
             # Fetch ALL documents for this tender from database
             db_docs = db.query(DocumentModel).filter(
-                DocumentModel.tender_id == tender_id
+                DocumentModel.thread_id == tender_id
             ).all()
             
             # Combine with currently processing ones if provided (for same-run awareness)

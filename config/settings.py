@@ -11,8 +11,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://rfq_user:rfq_secure_2024@
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "pixtral")  # 'pixtral' or 'openrouter'
 
 # Pixtral Configuration (Local)
-PIXTRAL_URL = os.getenv("PIXTRAL_URL", "http://192.168.1.3:11434")
-PIXTRAL_MODEL = os.getenv("PIXTRAL_MODEL", "pixtral:latest")
+PIXTRAL_URL = os.getenv("PIXTRAL_URL", "https://ai.gcucsstudent.site")
+PIXTRAL_MODEL = os.getenv("PIXTRAL_MODEL", "ai-agent:latest")
 
 # OpenRouter Configuration (Cloud)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")

@@ -17,8 +17,8 @@ TENANT_ID = os.getenv("OUTLOOK_TENANT_ID", "common")
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["https://graph.microsoft.com/Mail.Read", 
-          "https://graph.microsoft.com/Mail.ReadWrite",
-          "offline_access"]
+          "https://graph.microsoft.com/Mail.Send",
+          "https://graph.microsoft.com/Calendars.ReadWrite"]
 
 TOKEN_FILE = ".outlook_oauth_token.json"
 

@@ -17,11 +17,16 @@ REDIRECT_URI = 'http://localhost:8000/oauth/callback'
 # OAuth2 URLs
 AUTHORIZE_URL = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/authorize'
 TOKEN_URL = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token'
-# Scopes
+# Scopes (using full Graph URIs for clarity and avoiding reserved names)
+# Must be a LIST. We OMIT 'openid', 'profile', 'offline_access' as MSAL handles them automatically.
 SCOPES = [
     'https://graph.microsoft.com/Mail.ReadWrite',
     'https://graph.microsoft.com/Mail.Send',
-    'https://graph.microsoft.com/IMAP.AccessAsUser.All'
+    'https://graph.microsoft.com/Calendars.ReadWrite'
 ]
+
+# Defense: ensure it's a list if imported by other modules
+if not isinstance(SCOPES, list):
+    SCOPES = list(SCOPES)
 # Token storage
 TOKEN_FILE = Path('.outlook_oauth_token.json')

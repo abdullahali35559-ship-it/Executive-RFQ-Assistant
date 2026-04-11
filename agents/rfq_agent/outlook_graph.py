@@ -45,17 +45,29 @@ class OutlookGraphFetcher:
                 client_credential=CLIENT_SECRET
             )
             
+            # MSAL 1.28.0+ automatically manages OIDC scopes ('openid', 'profile', 'offline_access')
+            # Manually including them can cause 'ValueError: API does not accept frozenset...'
+            # We filter them out just in case they're still in the imported SCOPES
+            reserved_scopes = {'openid', 'profile', 'offline_access'}
+            scope_list = [s for s in list(SCOPES) if s not in reserved_scopes]
+            
+            # Use full URIs if they are short names
+            scope_list = [
+                s if s.startswith('http') else f"https://graph.microsoft.com/{s}" 
+                for s in scope_list
+            ]
+
             # Try to get from cache first
             accounts = msal_app.get_accounts()
             result = None
             if accounts:
-                result = msal_app.acquire_token_silent(SCOPES, account=accounts[0])
+                result = msal_app.acquire_token_silent(scope_list, account=accounts[0])
             
             # If not in cache or expired, try to use refresh token
             if not result and token_data.get('refresh_token'):
                 result = msal_app.acquire_token_by_refresh_token(
                     token_data['refresh_token'],
-                    scopes=SCOPES
+                    scopes=scope_list
                 )
             
             if result and 'access_token' in result:
@@ -89,16 +101,22 @@ class OutlookGraphFetcher:
     def connect(self) -> bool:
         """Verify connection to Graph API"""
         try:
-            # Test API connection with messages endpoint (not /me which fails)
+            # Test API connection
             url = f'{self.base_url}/me/messages?$top=1'
             response = self.session.get(url, headers=self._get_headers(), timeout=10)
             
             if response.status_code == 200:
                 print(f"[OK] Connected to Outlook Graph API")
                 return True
-            else:
-                print(f"[X] Graph API connection failed: {response.status_code} {response.text}")
-                return False
+            elif response.status_code == 401:
+                print(f"[!] Outlook Token Expired (401). Retrying refresh...")
+                self.access_token = None # Force reload
+                response = self.session.get(url, headers=self._get_headers(), timeout=10)
+                if response.status_code == 200:
+                    return True
+            
+            print(f"[X] Graph API connection failed: {response.status_code} {response.text}")
+            return False
         except Exception as e:
             print(f"[X] Error connecting to Graph API: {e}")
             return False
@@ -147,6 +165,35 @@ class OutlookGraphFetcher:
             
         except Exception as e:
             print(f"[X] Error fetching emails: {e}")
+            return []
+
+    def fetch_sent_emails(self, limit: int = 10) -> List[Dict]:
+        """Fetch recently sent emails to learn writing style"""
+        try:
+            # Use 'sentitems' well-known folder
+            url = f'{self.base_url}/me/mailFolders/sentitems/messages'
+            params = {
+                '$select': 'id,subject,from,receivedDateTime,bodyPreview,body',
+                '$orderby': 'receivedDateTime desc',
+                '$top': limit
+            }
+            
+            response = self.session.get(url, headers=self._get_headers(), params=params, timeout=30)
+            if response.status_code != 200:
+                return []
+                
+            data = response.json()
+            messages = data.get('value', [])
+            
+            emails = []
+            for msg in messages:
+                email_data = self._convert_to_email_format(msg)
+                if email_data:
+                    emails.append(email_data)
+                    
+            return emails
+        except Exception as e:
+            print(f"[X] Error fetching sent emails: {e}")
             return []
     
     def _convert_to_email_format(self, graph_message: Dict) -> Optional[Dict]:

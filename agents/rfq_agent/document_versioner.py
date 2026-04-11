@@ -144,7 +144,7 @@ class DocumentVersioner:
                     old_doc.replaced_at = datetime.utcnow()
                 
                 session.commit()
-                print(f"✅ Linked version {new_doc.version} to previous version")
+                print(f"DONE: Linked version {new_doc.version} to previous version")
             
         finally:
             if own_session:

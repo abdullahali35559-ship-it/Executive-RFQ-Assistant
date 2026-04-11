@@ -1,0 +1,6 @@
+============================================================
+DEBUG: OAuth Configuration
+CLIENT_ID: 22d35d3b-f2a4-4111-a1b1-1a49b133e153
+CLIENT_SECRET: **********
+REDIRECT_URI: http://localhost:8000/oauth/callback
+============================================================

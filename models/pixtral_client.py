@@ -66,8 +66,7 @@ class PixtralClient:
                     payload = {
                         "model": self.model,
                         "messages": messages,
-                        "temperature": temperature,
-                        "response_format": { "type": "json_object" } if "json" in user_prompt.lower() else None
+                        "temperature": temperature
                     }
                 else:
                     url = f"{self.base_url}/api/chat"
@@ -80,8 +79,8 @@ class PixtralClient:
                         "options": {"num_predict": 1000}
                     }
 
-                # Add a small delay before every request to avoid hitting rate limits too fast
-                if attempt > 0 or self.provider == "openrouter":
+                # Add a small delay only during retries to avoid hitting rate limits again
+                if attempt > 0:
                     time.sleep(retry_delay * (attempt + 1))
 
                 response = self.session.post(url, json=payload, headers=headers, timeout=120)
