@@ -6,6 +6,10 @@ venv/
 .venv/
 env/
 .env
+*.json_oauth_token.json
+.outlook_oauth_token.json
+.gmail_oauth_token.json
+oauth_token.json
 
 # Database
 *.db
