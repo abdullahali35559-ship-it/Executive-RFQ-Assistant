@@ -32,6 +32,9 @@ An Intelligent Tender Processing System designed for modern procurement workflow
 - Python 3.10+
 - PostgreSQL
 - OpenRouter API Key (for Claude 3.5 Sonnet)
+- **ClamAV** (Optional but recommended for malware scanning):
+  - On Linux: `sudo apt-get install clamav clamav-daemon`
+  - On Windows: Download and install from [ClamAV.net](https://www.clamav.net/) and add to PATH.
 
 ### 2. Installation
 ```bash
