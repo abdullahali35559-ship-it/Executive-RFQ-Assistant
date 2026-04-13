@@ -7,14 +7,14 @@ load_dotenv()
 def test_config():
     print("--- Verifying LLM Configuration ---")
     provider = os.getenv("LLM_PROVIDER")
-    url = os.getenv("PIXTRAL_URL")
-    api_key = os.getenv("PIXTRAL_API_KEY")
+    model = os.getenv("OPENROUTER_MODEL") or os.getenv("OPENAI_MODEL")
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
     
     print(f"Provider: {provider}")
-    print(f"URL: {url}")
+    print(f"Model: {model}")
     print(f"API Key Found: {bool(api_key)}")
     
-    if not api_key or api_key == "your_key_here":
+    if not api_key or "your_key" in api_key:
         print("[!] Warning: API Key is still placeholder. Please update .env")
         return
 
