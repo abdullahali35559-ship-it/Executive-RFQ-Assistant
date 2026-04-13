@@ -3032,4 +3032,4 @@ app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 app.mount("/", StaticFiles(directory="ui", html=True), name="ui")
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8069)
