@@ -13,7 +13,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('OUTLOOK_CLIENT_ID')
 CLIENT_SECRET = os.getenv('OUTLOOK_CLIENT_SECRET')
 TENANT_ID = 'consumers'  # For personal accounts
-REDIRECT_URI = 'http://localhost:8000/oauth/callback'
+REDIRECT_URI = os.getenv('OUTLOOK_REDIRECT_URI', 'http://localhost:8069/oauth/callback')
 # OAuth2 URLs
 AUTHORIZE_URL = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/authorize'
 TOKEN_URL = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token'

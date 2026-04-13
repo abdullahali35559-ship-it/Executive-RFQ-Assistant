@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown logic can go here
 
-app = FastAPI(title="Email Assistant API", lifespan=lifespan)
+app = FastAPI(title="RFI API", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
