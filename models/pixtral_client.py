@@ -18,6 +18,10 @@ class PixtralClient:
             self.base_url = OPENROUTER_URL
             self.model = OPENROUTER_MODEL
             self.api_key = OPENROUTER_API_KEY
+        elif self.provider == "openai":
+            self.base_url = "https://api.openai.com/v1"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+            self.api_key = os.getenv("OPENAI_API_KEY")
         else:
             from config.settings import PIXTRAL_URL, PIXTRAL_MODEL
             self.base_url = PIXTRAL_URL
@@ -61,7 +65,7 @@ class PixtralClient:
         
         for attempt in range(max_retries):
             try:
-                if self.provider == "openrouter":
+                if self.provider == "openrouter" or self.provider == "openai":
                     url = f"{self.base_url}/chat/completions"
                     payload = {
                         "model": self.model,
@@ -95,7 +99,7 @@ class PixtralClient:
                 
                 result = response.json()
                 
-                if self.provider == "openrouter":
+                if self.provider == "openrouter" or self.provider == "openai":
                     response_text = result['choices'][0]['message']['content']
                 else:
                     message_obj = result.get('message', {})
