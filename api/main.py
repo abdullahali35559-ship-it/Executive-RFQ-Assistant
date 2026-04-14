@@ -106,35 +106,27 @@ def init_admin():
     """Seed the initial admin user if not exists"""
     db = SessionLocal()
     try:
-        # Seed Admin with user's specific request
+        # Check if users already exist to avoid seeding errors
         admin_email = "admin@123"
-        admin_pass = "admin123"
+        user_name = "user123"
         
-        admin = db.query(User).filter(User.email == admin_email).first()
+        # Check admin
+        admin = db.query(AdminUser).filter(AdminUser.email == admin_email).first()
         if not admin:
-            admin = User(
+            db.add(AdminUser(
                 email=admin_email,
-                password_hash=get_password_hash(admin_pass),
-                role="admin",
-                full_name="RFI Admin",
-                is_active=True
-            )
-            db.add(admin)
+                hashed_password=get_password_hash("admin123"),
+                role="superadmin"
+            ))
         
-        # Seed Standard User with user's specific request
-        user_email = "user123"
-        user_pass = "user12345"
-        
-        user = db.query(User).filter(User.email == user_email).first()
+        # Check standard user
+        user = db.query(User).filter(User.username == user_name).first()
         if not user:
-            user = User(
-                email=user_email,
-                password_hash=get_password_hash(user_pass),
-                role="user",
-                full_name="Dashboard User",
-                is_active=True
-            )
-            db.add(user)
+            db.add(User(
+                username=user_name,
+                hashed_password=get_password_hash("user12345"),
+                role="user"
+            ))
             
         db.commit()
     except Exception as e:
