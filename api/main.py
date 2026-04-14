@@ -14,11 +14,15 @@ load_dotenv()
 # Allow OAuth scope changes (Google sometimes adds openid/email automatically)
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from auth.security import get_password_hash, verify_password, create_access_token
+from auth.dependencies import get_current_user, oauth2_scheme
 import asyncio
 import time
 
@@ -31,7 +35,7 @@ from sqlalchemy import desc, func, or_, text
 from database.models import (
     Contact, Topic, Thread, Email, Attachment, DraftReply, 
     AuditLog, AssistantChat, AssistantConversation, Tag,
-    FollowupTask
+    FollowupTask, User
 )
 from config.database import SessionLocal, init_db
 import msal
@@ -98,16 +102,80 @@ IMPORTANT:
 from contextlib import asynccontextmanager
 from agents.executive.assistant import ExecutiveAssistant
 
+def init_admin():
+    """Seed the initial admin user if not exists"""
+    db = SessionLocal()
+    try:
+        # Seed Admin with user's specific request
+        admin_email = "admin@123"
+        admin_pass = "admin123"
+        
+        admin = db.query(User).filter(User.email == admin_email).first()
+        if not admin:
+            admin = User(
+                email=admin_email,
+                password_hash=get_password_hash(admin_pass),
+                role="admin",
+                full_name="RFI Admin",
+                is_active=True
+            )
+            db.add(admin)
+        
+        # Seed Standard User with user's specific request
+        user_email = "user123"
+        user_pass = "user12345"
+        
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            user = User(
+                email=user_email,
+                password_hash=get_password_hash(user_pass),
+                role="user",
+                full_name="Dashboard User",
+                is_active=True
+            )
+            db.add(user)
+            
+        db.commit()
+    except Exception as e:
+        print(f"Seed error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database tables on startup
-    print("Initializing database...")
+    # Startup logic
     init_db()
-    print("Database initialized.")
+    # Migration fix for existing PostgreSQL tables
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+        # Attempt to convert user_id to integer if it's currently varchar
+        try:
+            db.execute(text("ALTER TABLE audit_log ALTER COLUMN user_id TYPE INTEGER USING (NULLIF(user_id, '')::integer)"))
+            db.commit()
+        except Exception:
+            db.rollback()
+            
+        db.execute(text("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50)"))
+        db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'"))
+        db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"))
+        db.commit()
+    except Exception as e:
+        print(f"Migration notice: {e}")
+        db.rollback()
+    finally:
+        db.close()
+    
+    init_admin() # Seed admin
     yield
     # Shutdown logic can go here
 
 app = FastAPI(title="RFI API", lifespan=lifespan)
+
+from api.admin import router as admin_router
+app.include_router(admin_router)
 
 # CORS middleware
 app.add_middleware(
@@ -153,10 +221,20 @@ def get_msal_app():
 def dashboard_redirect():
     return FileResponse("ui/index.html")
 
+@app.get("/admin")
+def admin_page(request: Request):
+    """Serve the admin panel (only if admin portal is intentional)"""
+    return FileResponse("ui/admin.html")
+
+@app.get("/admin/login")
+def admin_login_page():
+    """Serve the dedicated admin login portal"""
+    return FileResponse("ui/admin-login.html")
+
 @app.get("/")
 def root_redirect():
-    """Redirect root to dashboard"""
-    return FileResponse("ui/index.html")
+    """Redirect root to login page for pro security"""
+    return FileResponse("ui/login.html")
 
 # ============================================
 # AUTHENTICATION ROUTES
@@ -169,48 +247,109 @@ class UserRegister(BaseModel):
     role: Optional[str] = "user"
 
 @app.post("/api/auth/register")
-async def register(user_data: UserRegister):
-    """Register a new user (JSON-based)"""
-    um = UserManager()
-    if um.get_user_by_username(user_data.username):
-        raise HTTPException(status_code=400, detail="Username already exists")
-    
-    new_user = {
-        "username": user_data.username,
-        "password_hash": get_password_hash(user_data.password),
-        "email": user_data.email,
-        "role": user_data.role,
-        "created_at": datetime.utcnow().isoformat()
-    }
-    
-    if um.add_user(new_user):
+async def register(user_data: UserRegister, request: Request):
+    """Register a new user in PostgreSQL"""
+    from auth.audit import log_action
+    db = SessionLocal()
+    try:
+        # Check if email exists
+        existing = db.query(User).filter(User.email == user_data.email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        new_user = User(
+            email=user_data.email,
+            full_name=user_data.username, # Using username as full name for compatibility
+            password_hash=get_password_hash(user_data.password),
+            role=user_data.role or "user"
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
+        log_action(db, user_id=new_user.id, action="register", ip_address=request.client.host)
         return {"success": True, "message": "User registered successfully"}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to register user")
+    finally:
+        db.close()
 
 @app.post("/api/auth/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Authenticate and get a JWT token"""
-    um = UserManager()
-    user = um.get_user_by_username(form_data.username)
-    
-    if not user or not verify_password(form_data.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token = create_access_token(data={"sub": user["username"]})
-    
-    # Store session
-    sm = SessionManager()
-    from auth.security import ACCESS_TOKEN_EXPIRE_MINUTES
-    import time
-    expires_at = time.time() + (ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    sm.add_session(user["username"], access_token, expires_at)
-    
-    return {"access_token": access_token, "token_type": "bearer"}
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    """Authenticate via Database for REGULAR USERS ONLY"""
+    from auth.audit import log_action
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == form_data.username).first()
+        
+        if not user or not verify_password(form_data.password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # PRO LOCK: Prevent admins from using the standard user login
+        if user.role == "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin accounts must use the Admin Portal."
+            )
+
+        if not user.is_active:
+             raise HTTPException(status_code=400, detail="User account is disabled")
+
+        access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+        
+        # Update last login
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
+        
+        log_action(db, user_id=user.id, action="login", ip_address=request.client.host)
+        return {"access_token": access_token, "token_type": "bearer"}
+    finally:
+        db.close()
+
+@app.post("/api/admin/login")
+async def admin_portal_login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    """STRICT Admin-Only Authentication Endpoint"""
+    from auth.audit import log_action
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == form_data.username).first()
+        
+        if not user or not verify_password(form_data.password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Admin Credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # STRICT ROLE CHECK
+        if user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ACCESS DENIED: Not an admin account."
+            )
+
+        access_token = create_access_token(data={"sub": str(user.id), "role": "admin"})
+        
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
+        
+        log_action(db, user_id=user.id, action="admin_login", ip_address=request.client.host)
+        return {"access_token": access_token, "token_type": "bearer"}
+    finally:
+        db.close()
+
+@app.get("/api/auth/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Return the current user's profile info"""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+        "is_active": current_user.is_active
+    }
 
 @app.post("/api/auth/logout")
 async def logout(current_user: dict = Depends(get_current_user), token: str = Depends(oauth2_scheme)):
@@ -2023,6 +2162,7 @@ async def get_agent_status_legacy(current_user: dict = Depends(get_current_user)
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
 
 @app.get("/api/activity")
 async def get_activity(limit: int = 10):

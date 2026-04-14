@@ -235,6 +235,11 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
+                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
+                    class="btn btn-secondary btn-sm"
+                    style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
+                    Sign Out
+                </button>
             </div>
         </div>
     </nav>

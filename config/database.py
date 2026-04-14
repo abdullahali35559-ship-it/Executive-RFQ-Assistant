@@ -21,5 +21,8 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
-    from database.models import Contact, Topic, Tag, Thread, Email, Attachment, DraftReply, AuditLog, AssistantConversation, AssistantChat
+    from database.models import (
+        Contact, Topic, Tag, Thread, Email, Attachment, DraftReply, 
+        AuditLog, AssistantConversation, AssistantChat, User, FollowupTask
+    )
     Base.metadata.create_all(bind=engine)

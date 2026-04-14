@@ -5,30 +5,17 @@ from typing import Optional, Dict
 from authlib.jose import jwt
 from config.auth_settings import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def get_password_hash(password: str) -> str:
-    """Hash a password using PBKDF2 with a random salt."""
-    salt = secrets.token_hex(16)
-    hash_obj = hashlib.pbkdf2_hmac(
-        'sha256', 
-        password.encode('utf-8'), 
-        salt.encode('utf-8'), 
-        100000
-    )
-    return f"{salt}${hash_obj.hex()}"
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a stored PBKDF2 hash."""
-    try:
-        salt, stored_hash = hashed_password.split('$')
-        new_hash = hashlib.pbkdf2_hmac(
-            'sha256', 
-            plain_password.encode('utf-8'), 
-            salt.encode('utf-8'), 
-            100000
-        )
-        return new_hash.hex() == stored_hash
-    except ValueError:
-        return False
+    """Verify a plain password against a stored bcrypt hash."""
+    return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a new JWT access token."""

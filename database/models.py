@@ -186,15 +186,35 @@ class FollowupTask(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class User(Base):
+    __tablename__ = 'users'
+    
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    full_name = Column(String(255))
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(50), default='user') # 'user' or 'admin'
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime)
+    
+    # Relationships
+    audit_logs = relationship('AuditLog', back_populates='user')
+
 class AuditLog(Base):
     __tablename__ = 'audit_log'
     
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     thread_id = Column(String(50))
-    agent = Column(String(50)) # GENERAL_EMAIL_ASSISTANT
-    action = Column(String(100))
+    agent = Column(String(50), default='RFI_AGENT') 
+    action = Column(String(100), nullable=False)
     details = Column(JSONB)
+    ip_address = Column(String(50))
     timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship('User', back_populates='audit_logs')
 
 class AssistantConversation(Base):
     __tablename__ = 'assistant_conversations'

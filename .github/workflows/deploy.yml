@@ -1,28 +1,43 @@
-name: Deploy to VPS
+name: RFI Assistant CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    # Add tests here when ready
+    # - name: Run Tests
+    #   run: pytest
 
-      - name: SSH and Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd /path/to/your/project/rfi_vps_version
-            git pull origin main
-            source venv/bin/activate
-            pip install -r requirements.txt
-            # Restart command (example using pm2 or systemd)
-            # pm2 restart rfi-backend || pm2 start api/main.py --name rfi-backend
-            # systemctl restart rfi-assistant
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}       # 72.60.79.148
+        username: ${{ secrets.VPS_USER }}   # root
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          cd /root/rfi_vps_version
+          git pull origin main
+          pip install -r requirements.txt
+          # Restart the service (example using pm2 or systemd)
+          # systemctl restart rfi-agent
