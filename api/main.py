@@ -106,28 +106,40 @@ def init_admin():
     """Seed the initial admin user if not exists"""
     db = SessionLocal()
     try:
-        # Check if users already exist to avoid seeding errors
+        # Seed requested admin credentials
         admin_email = "admin@123"
-        user_name = "user123"
+        admin_pass_raw = "admin123"
         
-        # Check admin
-        admin = db.query(AdminUser).filter(AdminUser.email == admin_email).first()
+        # Check if admin exists
+        admin = db.query(User).filter(User.email == admin_email).first()
         if not admin:
-            db.add(AdminUser(
+            print(f"Seeding admin: {admin_email}")
+            admin = User(
                 email=admin_email,
-                hashed_password=get_password_hash("admin123"),
-                role="superadmin"
-            ))
+                password_hash=get_password_hash(admin_pass_raw),
+                role="admin",
+                full_name="System Admin",
+                is_active=True
+            )
+            db.add(admin)
         
-        # Check standard user
-        user = db.query(User).filter(User.username == user_name).first()
+        # Seed requested standard user credentials
+        user_email = "user123"
+        user_pass_raw = "user12345"
+        
+        # Check if user exists
+        user = db.query(User).filter(User.email == user_email).first()
         if not user:
-            db.add(User(
-                username=user_name,
-                hashed_password=get_password_hash("user12345"),
-                role="user"
-            ))
-            
+            print(f"Seeding user: {user_email}")
+            user = User(
+                email=user_email,
+                password_hash=get_password_hash(user_pass_raw),
+                role="user",
+                full_name="Dashboard User",
+                is_active=True
+            )
+            db.add(user)
+        
         db.commit()
     except Exception as e:
         print(f"Seed error: {e}")
