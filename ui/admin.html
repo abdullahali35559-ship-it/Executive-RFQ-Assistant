@@ -9,7 +9,7 @@
             window.location.href = '/admin/login';
         }
     </script>
-    <title>RFI Admin Panel</title>
+    <title>Admin Panel - RFI</title>
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%23FF5C35%22/><text y=%22.9em%22 font-size=%2280%22 x=%2250%25%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22serif%22 font-weight=%22bold%22>R</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,6 +26,8 @@
             --bg-light: #f8fafc;
             --border-color: #e2e8f0;
             --card-bg: #ffffff;
+            --primary-orange: #FF5C35;
+            /* Harmony with main app */
         }
 
         * {
@@ -521,17 +523,21 @@
 
     <header>
         <a href="/admin" class="header-logo">
-            <div class="logo-box">R</div>
-            RFI Admin
-            <span class="badge-admin-label">Admin Panel</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <span>RFI Admin</span>
+            <span class="badge-admin-label">Admin Control</span>
         </a>
         <div class="header-right">
             <div class="user-profile">
                 <div class="avatar" id="header-avatar">SA</div>
                 <span id="header-user-name">System Admin</span>
             </div>
-            <a href="/dashboard" class="btn-header">User Dashboard</a>
-            <button onclick="logout()" class="btn-header" style="background: #ef4444; color: white; border: none;">Sign
+            <a href="/index.html" class="btn-header">Go to Agent Dashboard</a>
+            <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'" class="btn-header"
+                style="background: #ef4444; color: white; border: none;">Sign
                 out</button>
         </div>
     </header>
@@ -539,7 +545,11 @@
     <div class="admin-layout">
         <aside class="sidebar">
             <div class="nav-group">
-                <div class="nav-group-label">Admin</div>
+                <div class="nav-group-label" style="display: flex; align-items: center; gap: 8px;">
+                    <span
+                        style="width: 8px; height: 8px; background: var(--primary-orange); border-radius: 50%;"></span>
+                    ADMIN CONTROL
+                </div>
                 <a href="#" class="nav-item active" data-section="overview">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"></rect>
@@ -547,7 +557,7 @@
                         <rect x="14" y="14" width="7" height="7"></rect>
                         <rect x="3" y="14" width="7" height="7"></rect>
                     </svg>
-                    Overview
+                    System Overview
                 </a>
                 <a href="#" class="nav-item" data-section="users">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -556,7 +566,7 @@
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
-                    Users
+                    User Management
                 </a>
                 <a href="#" class="nav-item" data-section="audit">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -564,14 +574,20 @@
                         <polyline points="14 2 14 8 20 8"></polyline>
                         <line x1="16" y1="13" x2="8" y2="13"></line>
                         <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
-                    Audit Log
+                    Full Audit Log
                 </a>
             </div>
 
-            <div class="nav-group">
-                <div class="nav-group-label">Navigation</div>
+            <div class="nav-group" style="margin-top: auto;">
+                <div class="nav-group-label">RFI AGENT ACCESS</div>
+                <a href="/index.html" class="nav-item" style="background: rgba(255, 92, 53, 0.1); color: white;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)"
+                        stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    Go to Agent Dashboard
+                </a>
                 <a href="#" onclick="logout()" class="nav-item">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
@@ -700,3 +716,8 @@
 </body>
 
 </html>
+
+
+
+
+

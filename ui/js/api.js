@@ -215,7 +215,7 @@ class RFQAgentAPI {
         });
     }
 
-    // AI Assistant
+    // RFI Assistant
     async getConversations() {
         return await this.request('/api/assistant/conversations');
     }

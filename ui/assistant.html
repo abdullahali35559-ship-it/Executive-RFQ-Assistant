@@ -16,21 +16,32 @@
     <link rel="stylesheet" href="css/components.css">
 
     <style>
+        body {
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
         .layout {
-            min-height: 100vh;
+            height: calc(100vh - 64px);
+            display: flex;
+            flex-direction: column;
             background: var(--bg-light);
+            overflow: hidden;
+            margin-top: 64px;
         }
 
         .main-content {
-            /* flex: 1; */
             margin-left: 200px;
-            margin-top: 64px;
-            padding: var(--space-6);
+            margin-top: 0;
+            padding: var(--space-2) var(--space-4);
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 64px);
+            height: 100%;
             overflow: hidden;
             box-sizing: border-box;
+            background: var(--bg-light);
         }
 
         /* Conversation Sidebar */
@@ -141,7 +152,7 @@
 
         /* Chat Main Area */
         .chat-main {
-            /* flex: 1; */
+            flex: 1;
             display: flex;
             flex-direction: column;
             background: #fff;
@@ -153,7 +164,7 @@
         }
 
         .chat-messages {
-            /* flex: 1; */
+            flex: 1;
             padding: var(--space-6);
             overflow-y: auto;
             display: flex;
@@ -163,7 +174,7 @@
         }
 
         .message {
-            max-width: 85%;
+            max-width: 92%;
             padding: var(--space-4) var(--space-6);
             border-radius: 20px;
             font-size: var(--text-md);
@@ -322,11 +333,11 @@
             height: 100%;
             color: var(--text-muted);
             text-align: center;
-            padding: var(--space-10);
+            padding: var(--space-4);
         }
 
         .empty-icon {
-            margin-bottom: var(--space-6);
+            margin-bottom: var(--space-4);
             opacity: 0.3;
             color: var(--primary-orange);
         }
@@ -409,11 +420,11 @@
     <nav class="nav">
         <div class="nav-container">
             <a href="index.html" class="nav-brand">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                 </svg>
-                RFI
+                <span>RFI</span>
             </a>
 
             <ul class="nav-links">
@@ -433,6 +444,11 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
+                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
+                    class="btn btn-secondary btn-sm"
+                    style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
+                    Sign Out
+                </button>
             </div>
         </div>
     </nav>
@@ -519,13 +535,11 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="assistant.html" class="sidebar-link active">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <a href="assistant.html" class="sidebar-link active"><svg width="18" height="18" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
-                        RFI
-                    </a>
+                        </svg>RFI Assistant</a>
                 </li>
                 <li class="sidebar-item">
                     <a href="settings.html" class="sidebar-link">
@@ -533,7 +547,7 @@
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                             </path>
                         </svg>
                         Settings
@@ -648,7 +662,7 @@
         let currentConversationId = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            console.log('AI Assistant page loaded...');
+            console.log('RFI page loaded...');
 
             // Auto-resize textarea
             chatInput.addEventListener('input', () => {

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Email Assistant</title>
+    <title>Settings - RFI</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -117,16 +117,9 @@
 </head>
 
 <body>
-    <!-- Navigation -->
     <nav class="nav">
         <div class="nav-container">
-            <a href="index.html" class="nav-brand">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                Email Assistant
-            </a>
+            <a href="index.html" class="nav-brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><span>RFI</span></a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link">Dashboard</a></li>
@@ -136,21 +129,20 @@
             </ul>
 
             <div class="flex items-center gap-4">
-                <div id="premiumStatus" class="badge"
-                    style="background: rgba(255, 122, 69, 0.1); border: 1px solid rgba(255, 122, 69, 0.2); color: var(--primary-orange); display: none;">
-                    <span class="status-indicator status-online pulse"></span>
-                    <span id="premiumStatusText">AI Indexing...</span>
-                </div>
                 <span class="badge" id="systemStatusBadge">
                     <span class="status-indicator" id="systemStatusIndicator"></span>
                     <span id="systemStatusText">Checking...</span>
                 </span>
+                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
+                    class="btn btn-secondary btn-sm"
+                    style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
+                    Sign Out
+                </button>
             </div>
         </div>
     </nav>
 
     <div class="layout">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <ul class="sidebar-menu">
                 <li class="sidebar-item">
@@ -231,13 +223,7 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="assistant.html" class="sidebar-link">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
-                        AI Assistant
-                    </a>
+                    <a href="assistant.html" class="sidebar-link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>RFI Assistant</a>
                 </li>
                 <li class="sidebar-item">
                     <a href="settings.html" class="sidebar-link active">
@@ -245,7 +231,7 @@
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                             </path>
                         </svg>
                         Settings
@@ -343,7 +329,7 @@
                         <input type="text" id="newTagName" class="form-input"
                             placeholder="e.g. Urgent, Inquiry, Invoice">
                     </div>
-                    <div style="/* flex: 1; */">
+                    <div style="flex: 1;">
                         <label class="form-label">Color</label>
                         <input type="color" id="newTagColor" class="form-input" value="#4F46E5"
                             style="height: 42px; padding: 4px;">
@@ -630,3 +616,8 @@
 </body>
 
 </html>
+
+
+
+
+

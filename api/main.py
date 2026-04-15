@@ -106,43 +106,34 @@ def init_admin():
     """Seed the initial admin user if not exists"""
     db = SessionLocal()
     try:
-        # Seed requested admin credentials
         admin_email = "admin@123"
-        admin_pass_raw = "admin123"
+        user_email = "user123"
         
-        # Check if admin exists
+        # Check admin
         admin = db.query(User).filter(User.email == admin_email).first()
         if not admin:
             print(f"Seeding admin: {admin_email}")
-            admin = User(
-                email=admin_email,
-                password_hash=get_password_hash(admin_pass_raw),
-                role="admin",
-                full_name="System Admin",
-                is_active=True
-            )
-            db.add(admin)
+            raw_pass = "admin123"
+            try:
+                hashed = get_password_hash(raw_pass)
+                db.add(User(email=admin_email, password_hash=hashed, role="admin", is_active=True))
+            except Exception as inner_e:
+                print(f"Bcrypt hash error (admin): {inner_e}")
         
-        # Seed requested standard user credentials
-        user_email = "user123"
-        user_pass_raw = "user12345"
-        
-        # Check if user exists
+        # Check standard user
         user = db.query(User).filter(User.email == user_email).first()
         if not user:
             print(f"Seeding user: {user_email}")
-            user = User(
-                email=user_email,
-                password_hash=get_password_hash(user_pass_raw),
-                role="user",
-                full_name="Dashboard User",
-                is_active=True
-            )
-            db.add(user)
-        
+            raw_user_pass = "user12345"
+            try:
+                hashed_u = get_password_hash(raw_user_pass)
+                db.add(User(email=user_email, password_hash=hashed_u, role="user", is_active=True))
+            except Exception as inner_e:
+                print(f"Bcrypt hash error (user): {inner_e}")
+            
         db.commit()
     except Exception as e:
-        print(f"Seed error: {e}")
+        print(f"Global Seed error: {e}")
         db.rollback()
     finally:
         db.close()
