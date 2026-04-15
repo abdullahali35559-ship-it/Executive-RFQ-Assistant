@@ -26,7 +26,6 @@
         .layout {
             height: calc(100vh - 64px);
             display: flex;
-            flex-direction: column;
             background: var(--bg-light);
             overflow: hidden;
             margin-top: 64px;
@@ -39,15 +38,17 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            width: calc(100% - 200px);
             overflow: hidden;
             box-sizing: border-box;
             background: var(--bg-light);
+            flex: 1;
         }
 
         /* Conversation Sidebar */
         .chat-layout {
             display: flex;
-            /* flex: 1; */
+            flex: 1;
             gap: var(--space-6);
             height: 100%;
             overflow: hidden;
