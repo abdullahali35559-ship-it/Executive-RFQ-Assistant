@@ -38,6 +38,7 @@ async def outlook_oauth_login():
 
 @router.get("/api/oauth/callback")
 @router.get("/api/outlook/oauth/callback")
+@router.get("/oauth/callback") # Alias for console compatibility
 async def outlook_oauth_callback(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     code = request.query_params.get('code')
     if not code:
@@ -115,6 +116,7 @@ async def gmail_oauth_login():
     return {"auth_url": auth_url}
 
 @router.get("/api/gmail/oauth/callback")
+@router.get("/gmail/oauth/callback") # Alias for console compatibility
 async def gmail_oauth_callback(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     code = request.query_params.get('code')
     flow = get_gmail_flow()
