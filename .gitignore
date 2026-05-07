@@ -5,8 +5,9 @@
 env/
 venv/
 ENV/
+
+# Legacy folders (Exclude from tracking)
 "RFQ agent/"
-RFQ_agent/
 
 # Database
 *.db
