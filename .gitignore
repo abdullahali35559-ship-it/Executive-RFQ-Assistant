@@ -23,6 +23,9 @@ storage/
 temp/
 tmp/
 *.log
+*.zip
+*.rar
+*.7z
 
 # Python
 __pycache__/
