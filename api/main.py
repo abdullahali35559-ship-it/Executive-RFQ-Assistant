@@ -79,9 +79,21 @@ def init_admin():
                 role="superadmin", 
                 full_name="System Owner"
             ))
+
+        # Add regular user for testing
+        test_user = db.query(User).filter(User.email == "user123").first()
+        if not test_user:
+            db.add(User(
+                email="user123", 
+                password_hash=get_password_hash("user12345"), 
+                role="user", 
+                full_name="Standard User"
+            ))
+            
         db.commit()
     finally:
         db.close()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
