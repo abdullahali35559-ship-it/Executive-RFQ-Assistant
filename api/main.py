@@ -216,11 +216,14 @@ async def serve_page(page_name: str):
 
 if __name__ == "__main__":
     import uvicorn
+    # Get port from environment variable with fallback
+    env_port = int(os.getenv("PORT", 8069))
+    
     # Optimized Reload: Exclude heavy folders to prevent infinite loops
     uvicorn.run(
         "main:app", 
         host="0.0.0.0", 
-        port=8069, 
+        port=env_port, 
         reload=True,
         reload_dirs=["api", "agents", "models", "auth", "config", "database", "ui"],
         reload_excludes=["venv", ".git", "storage", "temp", "*RFQ agent*", "**/venv/**"]
