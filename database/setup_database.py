@@ -27,12 +27,12 @@ def create_database():
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-        print("✅ Database connection successful")
+        print("[OK] Database connection successful")
     except Exception as e:
-        print(f"❌ Connection failed: {e}")
+        print(f"[ERROR] Connection failed: {e}")
         print("\nPlease ensure:")
         print("1. PostgreSQL is running")
-        print("2. Database 'tender_system_db' exists")
+        print("2. Database 'rfi_multi_agent_db' exists")
         print("3. Credentials in .env are correct")
         return False
     
@@ -40,34 +40,33 @@ def create_database():
     try:
         # Create all tables
         Base.metadata.create_all(bind=engine)
-        print("✅ Tables created successfully")
+        print("[OK] Tables created successfully")
     except Exception as e:
-        print(f"❌ Table creation failed: {e}")
+        print(f"[ERROR] Table creation failed: {e}")
         return False
     
     print("\n[3/3] Verifying tables...")
     try:
         db = SessionLocal()
         
-        # Check each table
-        tables = ['clients', 'projects', 'tenders', 'documents']
+        # Check each table with new generic names
+        tables = ['contacts', 'topics', 'threads', 'attachments', 'emails', 'users']
         for table in tables:
             result = db.execute(text(f"SELECT COUNT(*) FROM {table}"))
             count = result.fetchone()[0]
-            print(f"  ✅ {table}: {count} records")
+            print(f"  [DB] {table}: {count} records")
         
         db.close()
     except Exception as e:
-        print(f"❌ Verification failed: {e}")
+        print(f"[ERROR] Verification failed: {e}")
         return False
     
     print("\n" + "=" * 60)
-    print("✅ DATABASE SETUP COMPLETE!")
+    print("[SUCCESS] DATABASE SETUP COMPLETE!")
     print("=" * 60)
     print("\nNext steps:")
     print("1. Database is ready to use")
-    print("2. Run: .\\process_emails.bat")
-    print("3. Data will be saved to database + files")
+    print("2. Start the backend: python api/main.py")
     print("\n")
     
     return True
@@ -76,8 +75,8 @@ if __name__ == "__main__":
     success = create_database()
     
     if not success:
-        print("\n⚠️  Setup failed. Please fix errors and try again.")
+        print("\n[ALERT] Setup failed. Please fix errors and try again.")
         sys.exit(1)
     else:
-        print("🎉 You're all set!")
+        print("System is now ready.")
         sys.exit(0)

@@ -18,14 +18,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a new JWT access token."""
+    """Create a new JWT access token with Professional ISS/AUD claims."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": int(expire.timestamp())})
+    to_encode.update({
+        "exp": int(expire.timestamp()),
+        "iss": "rfi-platform-auth",  # ISSUER Claim
+        "aud": "rfi-api-client"      # AUDIENCE Claim
+    })
     header = {"alg": JWT_ALGORITHM}
     payload = to_encode
     
@@ -33,10 +37,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return token.decode('utf-8')
 
 def decode_access_token(token: str) -> Optional[Dict]:
-    """Decode and verify a JWT access token."""
+    """Decode and verify a JWT access token with Professional standards."""
+    if not token or token in ["null", "undefined", "None", ""]:
+        return None
     try:
+        # Standard Authlib Decode
         claims = jwt.decode(token, JWT_SECRET_KEY)
         claims.validate()
-        return claims
-    except Exception:
+        
+        # Explicit Claim Verification for 100% Assurance
+        if claims.get("iss") != "rfi-platform-auth" or claims.get("aud") != "rfi-api-client":
+            return None
+            
+        return dict(claims)
+    except Exception as e:
+        print(f"DEBUG: auth.security.decode_access_token FAILED: {str(e)}")
         return None

@@ -270,8 +270,8 @@
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
+    <script src="js/auth.js?v=2.4"></script>
+    <script src="js/api.js?v=2.4"></script>
     <script>
         document.getElementById('loginForm').onsubmit = async (e) => {
             e.preventDefault();
@@ -280,6 +280,9 @@
             const label = document.getElementById('submitLabel');
             const spinner = document.getElementById('submitSpinner');
             const errorBox = document.getElementById('errorBox');
+
+            // AGGRESSIVE CACHE RESET: Wipe all old session data before trying to log in
+            localStorage.clear();
 
             // Loading state
             btn.disabled = true;
@@ -298,12 +301,11 @@
                 });
                 const data = await resp.json();
 
-                if (resp.ok && data.access_token) {
-                    Auth.setToken(data.access_token);
-                    label.textContent = 'Success! Redirecting...';
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 800);
+                if (resp.ok) {
+                    label.textContent = 'Identity Verified. Entering Portal...';
+                    // Mark session as active in local cache (Not a token!)
+                    localStorage.setItem('rfi_user_session', 'active');
+                    window.location.href = data.redirect_url;
                 } else {
                     throw new Error(data.detail || 'Access denied');
                 }
@@ -319,8 +321,3 @@
 </body>
 
 </html>
-
-
-
-
-

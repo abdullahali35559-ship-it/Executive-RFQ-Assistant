@@ -9,8 +9,12 @@ sys.path.append('.')
 from agents.rfq_agent.email_detector import EmailDetector
 from agents.rfq_agent.document_classifier import DocumentClassifier
 from agents.rfq_agent.file_manager import FileManager, generate_tender_id
-from agents.rfq_agent.reply_generator import ReplyGenerator
 from agents.rfq_agent.draft_manager import DraftManager
+from agents.rfq_agent.orchestrator import AgentOrchestrator
+from agents.rfq_agent.rfi_generator import RFIGenerator
+from agents.rfq_agent.metadata_extractor import MetadataExtractor
+from agents.rfq_agent.malware_scanner import MalwareScanner
+from agents.rfq_agent.handover_generator import HandoverGenerator
 # from agents.rfq_agent.metadata_extractor import MetadataExtractor # Generic now
 from agents.rfq_agent.client_matcher import ClientMatcher # To be renamed later
 from agents.rfq_agent.project_matcher import ProjectMatcher # To be renamed later
@@ -25,7 +29,7 @@ import zipfile
 import io
 from typing import Dict, List
 from datetime import datetime, timezone
-from database.models import Thread, Attachment, Email, DraftReply, AuditLog, Contact, Topic, Tag
+from database.models import Thread, Attachment, Email, DraftReply, AuditLog, Contact, Topic, Tag, User
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to be safe for filesystem"""
@@ -115,13 +119,24 @@ def process_incoming_email(email_data: Dict):
         # Step 2: Contact & Topic Identification
         print("\nStep 2: Identifying contact...")
         client_matcher = ClientMatcher()
-        contact = client_matcher.find_or_create_client(
-            email_sender=email_data['sender'],
-            email_body=email_data['body'],
-            session=db_session
-        )
         
-        print("\nStep 3: Matching topic...")
+        # Track if it's a new or existing contact
+        contact = client_matcher.match_by_email_domain(email_data['sender'], db_session)
+        is_new_client = contact is None
+        
+        if is_new_client:
+            print("  [+] NEW CLIENT detected. Initializing profile...")
+            contact = client_matcher.find_or_create_client(
+                email_sender=email_data['sender'],
+                email_body=email_data['body'],
+                session=db_session
+            )
+        else:
+            print(f"  [*] EXISTING CLIENT: {contact.contact_name}")
+            contact.last_contact = datetime.utcnow()
+            db_session.commit()
+
+        # Determine Workflow Type & ID Early
         project_matcher = ProjectMatcher()
         topic = project_matcher.find_matching_project(
             client_id=contact.id,
@@ -132,16 +147,35 @@ def process_incoming_email(email_data: Dict):
         is_update = topic is not None
         if is_update:
             thread_id = topic.thread_id
-            print(f"DONE: Existing topic found: {topic.topic_name}")
         else:
             thread_id = generate_tender_id()
-            print(f"DONE: New topic - Generated ID: {thread_id}")
+        
+        # Log progress with identified thread_id
+        if is_new_client:
+            log_progress(db_session, thread_id, "New Client Onboarded", {"client": contact.contact_name})
+        else:
+            log_progress(db_session, thread_id, "Existing Client Recognized", {"client": contact.contact_name, "match_type": "domain"})
+        
+        print("\nStep 3: Matching project/topic...")
+        # Re-fetch topic if we didn't find it or if we need to link the NEW contact
+        if not is_update:
+            workflow_type = "NEW_PROJECT"
+            print(f"DONE: New tender package identified. Generated ID: {thread_id}")
             topic = project_matcher.create_new_project(
                 client_id=contact.id,
                 tender_id=thread_id,
                 project_name=email_data['subject'],
                 session=db_session
             )
+        else:
+            # Check if this is an update to an incomplete tender
+            existing_thread = db_session.query(Thread).filter(Thread.thread_id == thread_id).first()
+            if existing_thread and existing_thread.status == 'AWAITING_DOCS' and email_data.get('attachments'):
+                workflow_type = "MISSING_DOCS_UPDATE"
+                print(f"DONE: MISSING DOCUMENTS received for project: {topic.topic_name}")
+            else:
+                workflow_type = "FOLLOWUP"
+                print(f"DONE: Follow-up received for existing project: {topic.topic_name}")
             
         # Parse sender for thread record
         sender_str = email_data['sender']
@@ -175,12 +209,18 @@ def process_incoming_email(email_data: Dict):
             print(f"  [+] Creating new email record for {email_data['email_id']}...")
             email_record = Email(
                 email_id=email_data['email_id'],
+                message_id=email_data.get('message_id'),
+                in_reply_to=email_data.get('in_reply_to'),
                 thread_id=thread_id,
                 subject=email_data['subject'],
                 sender=email_data['sender'],
                 body=email_data['body'],
                 received_at=datetime.utcnow(),
-                processed=True
+                processed=True,
+                meta_data={
+                    'conversation_id': email_data.get('conversation_id'),
+                    'provider': email_data.get('provider')
+                }
             )
             db_session.add(email_record)
         else:
@@ -256,6 +296,7 @@ def process_incoming_email(email_data: Dict):
         # Step 5: Process Attachments (Flat Storage)
         print("\nStep 5: Processing attachments...")
         classifier = DocumentClassifier()
+        scanner = MalwareScanner()
         versioner = DocumentVersioner()
         processed_docs = []
         
@@ -267,17 +308,32 @@ def process_incoming_email(email_data: Dict):
             temp_path = os.path.join(os.getcwd(), "temp", filename)
             with open(temp_path, 'wb') as f: f.write(att['content'])
             
+            # Malware Scan
+            scan_result = scanner.scan_file(temp_path)
+            if scan_result['status'] == 'INFECTED':
+                print(f"  [X] MALWARE DETECTED in {filename}. Quarantined.")
+                log_progress(db_session, thread_id, "Malware Detected", {"file": filename, "detail": scan_result['detail']})
+                continue # Skip processing this file
+            
             analysis = classifier.classify_document(filename, temp_path)
+            
+            # Versioning Logic
+            latest_v = versioner.get_latest_version(thread_id, filename, db_session)
+            new_v = latest_v + 1
+            if new_v > 1:
+                print(f"  [+] UPDATED VERSION detected for {filename}. Setting version to v{new_v}")
             
             save_result = file_manager.save_file(
                 file_data=att['content'],
                 tender_id=thread_id,
                 category=analysis.get('category', 'General'),
-                original_filename=filename
+                original_filename=filename,
+                version=new_v
             )
             
             new_att = Attachment(
                 thread_id=thread_id,
+                email_id=email_data['email_id'],
                 category=analysis.get('category', 'General'),
                 filename=save_result['versioned_filename'],
                 original_filename=filename,
@@ -285,36 +341,61 @@ def process_incoming_email(email_data: Dict):
                 file_hash=save_result['hash'],
                 file_size_bytes=save_result['size'],
                 doc_type=analysis.get('file_type', 'Document'),
-                summary=analysis.get('summary', '')
+                summary=analysis.get('summary', ''),
+                version=new_v
             )
             db_session.add(new_att)
             processed_docs.append({
                 "filename": filename,
+                "category": analysis.get('category', 'General'),
                 "summary": analysis.get('summary', ''),
+                "raw_text": analysis.get('raw_text', ''),
                 "file_path": save_result['path']
             })
             if os.path.exists(temp_path): os.remove(temp_path)
 
         db_session.commit()
 
-        # Step 6: Generate Professional Draft
-        print("\nStep 6: Generating professional draft...")
-        reply_gen = ReplyGenerator()
-        draft_manager = DraftManager()
+        # 1. Fetch User Profile for Style Mirroring
+        user = db_session.query(User).first() # In multi-tenant, fetch by ID
+        writing_style_guide = user.writing_style_guide if user else ""
+        custom_instructions = user.custom_instructions if user else ""
+
+        # 2. Fallback to historical analysis if no style guide exists yet
+        if not writing_style_guide:
+            print("  [!] No Style Guide found. Falling back to historical email analysis...")
+            past_sent = db_session.query(Email).filter(Email.is_sent == True).order_by(Email.received_at.desc()).limit(3).all()
+            writing_style_guide = "SAMPLE EMAILS FROM USER:\n" + "\n---\n".join([e.body for e in past_sent if e.body])
+            print(f"  [+] Pulled {len(past_sent)} past sent emails for Style Mirroring.")
+
+        print("\nStep 6: Executing Multi-Agent Analysis...")
+        orchestrator = AgentOrchestrator()
         
-        draft_content = reply_gen.generate_draft(
-            sender=email_data['sender'],
-            subject=email_data['subject'],
-            body=email_data['body'],
-            attachments=processed_docs
+        # Run the collaborative workflow with Style Mirroring
+        workflow_result = orchestrator.process_inquiry(
+            email_data=email_data,
+            documents=processed_docs,
+            writing_style_guide=writing_style_guide,
+            custom_instructions=custom_instructions
         )
         
+        if workflow_result.get('status') == 'SKIPPED':
+            print(f"  [!] Workflow skipped: {workflow_result.get('reason')}")
+            # Fallback to simple draft if needed, or skip
+            return {"status": "SKIPPED", "reason": workflow_result.get('reason')}
+
+        analysis_data = workflow_result.get('analysis', {})
+        research_data = workflow_result.get('research', {})
+        draft_content = workflow_result.get('draft', {})
+        
         provider = email_data.get('provider', 'gmail').lower()
-        draft_result = draft_manager.create_draft(
+        draft_mgr = DraftManager()
+        draft_result = draft_mgr.create_draft(
+
             provider=provider,
             to=email_data['sender'],
-            subject=draft_content['subject'],
-            body=draft_content['body']
+            subject=draft_content.get('draft_subject', email_data['subject']),
+            body=draft_content.get('draft_body', 'Professional response pending.')
         )
         
         if draft_result['success']:
@@ -322,41 +403,165 @@ def process_incoming_email(email_data: Dict):
                 thread_id=thread_id,
                 draft_type='REPLY',
                 recipient=email_data['sender'],
-                subject=draft_content['subject'],
-                body=draft_content['body'],
+                subject=draft_content.get('draft_subject', email_data['subject']),
+                body=draft_content.get('draft_body', ''),
                 email_provider=provider,
                 provider_draft_id=draft_result['draft_id'],
                 status='DRAFT',
-                in_reply_to_email_id=email_data['email_id']
+                in_reply_to_email_id=email_data['email_id'],
+                meta_data={
+                    "multi_agent_analysis": analysis_data,
+                    "research_findings": research_data.get('findings', [])
+                }
             )
             db_session.add(new_draft)
             print("DONE: Draft reply created successfully.")
+
+        # Step 6.5: Construction Intelligence - Check Completeness & Generate RFI
+        print("\nStep 6.5: Checking Tender Completeness...")
+        rfi_gen = RFIGenerator()
+        completeness = rfi_gen.check_completeness(thread_id, documents=processed_docs)
         
-        # Step 7: Suggest Tags & Extract Meeting Details
-        print("\nStep 7: AI Analysis (Tags & Meetings)...")
-        analysis_result = reply_gen.suggest_categories(
-            subject=email_data['subject'],
-            body=email_data['body'],
-            attachment_names=[d['filename'] for d in processed_docs],
-            current_date=datetime.utcnow().strftime('%Y-%m-%d')
+        missing = completeness.get('missing', [])
+        incorrect = completeness.get('incorrect', [])
+        irrelevant = completeness.get('irrelevant', [])
+
+        if missing or incorrect:
+            # Only create RFI if it's NOT a missing docs update (to avoid loops)
+            if workflow_type != "MISSING_DOCS_UPDATE":
+                print(f"  [!] Missing: {missing} | Incorrect: {incorrect}")
+                print("  [+] Generating Consolidated RFI Draft...")
+                
+                tender_metadata = {
+                    "client_name": contact.contact_name,
+                    "tender_reference": topic.topic_reference or thread_id
+                }
+                
+                rfi_draft_content = rfi_gen.generate_consolidated_rfi_draft(
+                    tender_id=thread_id,
+                    missing_categories=missing,
+                    incorrect_categories=incorrect,
+                    irrelevant_files=irrelevant,
+                    tender_metadata=tender_metadata
+                )
+                
+                rfi_draft_result = draft_mgr.create_draft(
+                    provider=provider,
+                    to=email_data['sender'],
+                    subject=rfi_draft_content.get('subject', f"RFI - Missing Documents for {thread_id}"),
+                    body=rfi_draft_content.get('body', "Please provide the missing documents.")
+                )
+                
+                if rfi_draft_result['success']:
+                    new_rfi_draft = DraftReply(
+                        thread_id=thread_id,
+                        draft_type='CLARIFICATION',
+                        recipient=email_data['sender'],
+                        subject=rfi_draft_content.get('subject'),
+                        body=rfi_draft_content.get('body'),
+                        email_provider=provider,
+                        provider_draft_id=rfi_draft_result['draft_id'],
+                        status='DRAFT',
+                        in_reply_to_email_id=email_data['email_id'],
+                        meta_data={
+                            "missing_categories": missing,
+                            "incorrect_categories": incorrect
+                        }
+                    )
+                    db_session.add(new_rfi_draft)
+                    print(f"DONE: Consolidated RFI Draft created for {len(missing) + len(incorrect)} issues.")
+            
+            # Update Thread status
+            new_thread.status = 'AWAITING_DOCS'
+            log_progress(db_session, thread_id, f"Incomplete Tender ({workflow_type})", {"missing": missing})
+        else:
+            print("  [OK] Tender package appears complete.")
+            new_thread.status = 'ACTIVE'
+            log_progress(db_session, thread_id, "Tender Package Complete", {"workflow": workflow_type})
+            
+            # Automated Operational Handover
+            try:
+                print("  [+] Generating Operational Handover Packet...")
+                handover_gen = HandoverGenerator()
+                handover_result = handover_gen.create_handover(thread_id, processed_docs)
+                log_progress(db_session, thread_id, "Operational Handover Generated", {"packet": handover_result.get('handover_id')})
+            except Exception as e:
+                print(f"  [!] Handover generation failed: {e}")
+
+        # Step 7.5: Deep Metadata Extraction
+        print("\nStep 7.5: Extracting Deep Project Intelligence...")
+        meta_extractor = MetadataExtractor()
+        deep_meta = meta_extractor.extract_metadata(thread_id, email_data, processed_docs)
+        
+        if deep_meta:
+            print(f"  [+] Deep Intelligence: Location={deep_meta.get('location')} | Deadline={deep_meta.get('submission_deadline')}")
+            
+            # Merge into Thread meta_data
+            thread_meta = new_thread.meta_data or {}
+            thread_meta.update(deep_meta)
+            new_thread.meta_data = thread_meta
+            
+            # Update specific fields if they exist in deep_meta
+            if deep_meta.get('tender_reference'):
+                new_thread.thread_reference = deep_meta['tender_reference']
+            if deep_meta.get('project_name'):
+                new_thread.topic_name = deep_meta['project_name']
+                
+            db_session.commit()
+
+        # Step 8: Handover Generation
+        print("\nStep 8: Generating Operational Handover...")
+        handover_gen = HandoverGenerator()
+        
+        # Get all RFI drafts for this thread
+        rfi_drafts_recs = db_session.query(DraftReply).filter(
+            DraftReply.thread_id == thread_id,
+            DraftReply.draft_type == 'CLARIFICATION'
+        ).all()
+        
+        rfi_drafts_list = [{
+            "subject": d.subject,
+            "id": d.provider_draft_id
+        } for d in rfi_drafts_recs]
+        
+        handover_payload = handover_gen.create_handover(
+            tender_id=thread_id,
+            metadata=new_thread.meta_data or {},
+            documents=processed_docs,
+            rfi_drafts=rfi_drafts_list
         )
         
-        suggested_tag_names = analysis_result.get('suggested_tags', [])
-        meeting_details = analysis_result.get('meeting_details') if analysis_result.get('meeting_detected') else None
-        action_items = analysis_result.get('action_items', [])
+        # Save Handover JSON to the thread folder
+        handover_path = os.path.join(thread_folder, "handover_packet.json")
+        with open(handover_path, 'w') as f:
+            json.dump(handover_payload, f, indent=4)
+        
+        print(f"DONE: Handover Packet generated at {handover_path}")
+        log_progress(db_session, thread_id, "Handover Generated")
+        
+        # Step 7: Apply AI Insights from Multi-Agent Results
+        print("\nStep 7: Applying AI Insights (Tags & Strategy)...")
+        
+        suggested_tag_names = analysis_data.get('suggested_tags', []) # Ensure Manager returns this or fallback
+        if not suggested_tag_names:
+            suggested_tag_names = [analysis_data.get('business_segment', 'General')]
+            
+        action_items = research_data.get('technical_notes', [])
+        if isinstance(action_items, str):
+            action_items = [action_items]
         
         if email_record:
             if suggested_tag_names:
                 email_record.tags_suggested = suggested_tag_names
             
-            # Combine meeting suggestion and action items into meta_data
+            # Combine strategy and findings into meta_data
             meta = email_record.meta_data or {}
-            if meeting_details:
-                print(f"  [!] Meeting detected: {meeting_details.get('topic') or 'No Topic'}")
-                meta["meeting_suggestion"] = meeting_details
+            meta["business_segment"] = analysis_data.get('business_segment')
+            meta["priority"] = analysis_data.get('priority')
+            meta["strategic_plan"] = analysis_data.get('strategic_plan')
             
             if action_items:
-                print(f"  [!] {len(action_items)} Action Items detected.")
+                print(f"  [!] Actionable insights detected.")
                 meta["action_items"] = action_items
                 
             email_record.meta_data = meta

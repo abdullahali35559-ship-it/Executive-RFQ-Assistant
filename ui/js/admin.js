@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (user.role !== 'admin') {
                 alert('Access Denied: Admin privileges required.');
-                window.location.href = '/login.html';
+                window.location.href = '/';
                 return;
             }
         } else {

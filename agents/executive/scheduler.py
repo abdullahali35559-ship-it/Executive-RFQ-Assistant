@@ -47,17 +47,20 @@ class GoogleCalendarClient:
         """Get busy slots for the next X days"""
         if not self.service: return []
         
-        # Get start of today in UTC
-        now_today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        now_str = now_today.isoformat() + 'Z'
-        end_str = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+        # Calculate range
+        start_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(days=days)
         
-        print(f"[Google] Fetching events from {now_str} to {end_str}...")
+        # Ensure timeMin < timeMax for API
+        t_min = min(start_dt, end_dt).isoformat() + 'Z'
+        t_max = max(start_dt, end_dt).isoformat() + 'Z'
+        
+        print(f"[Google] Fetching events from {t_min} to {t_max}...")
         try:
             events_result = self.service.events().list(
                 calendarId='primary', 
-                timeMin=now_str,
-                timeMax=end_str,
+                timeMin=t_min,
+                timeMax=t_max,
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
@@ -68,7 +71,7 @@ class GoogleCalendarClient:
             print(f"[Google] Event Fetch Error: {e}")
             return []
 
-    def create_event(self, summary: str, start_time: str, end_time: str, description: str = "", attendees: List[str] = []) -> Dict:
+    def create_event(self, summary: str, start_time: str, end_time: str, description: str = "", attendees: List[str] = [], send_updates: str = 'all') -> Dict:
         """Create a new event on Google Calendar"""
         if not self.service: return {"success": False, "error": "Not connected"}
         
@@ -97,7 +100,7 @@ class GoogleCalendarClient:
                 calendarId='primary', 
                 body=event,
                 conferenceDataVersion=1,
-                sendUpdates='all'
+                sendUpdates=send_updates
             ).execute()
             # Return the full object so we can access hangoutLink
             created_event['success'] = True
@@ -127,14 +130,17 @@ class OutlookCalendarClient:
         return self.fetcher.connect()
 
     def get_upcoming_events(self, days=3) -> List[Dict]:
-        # Get start of today in UTC
-        now_today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        now_str = now_today.isoformat() + 'Z'
-        end_str = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+        # Calculate range
+        start_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(days=days)
         
-        url = f"https://graph.microsoft.com/v1.0/me/calendar/calendarView?startDateTime={now_str}&endDateTime={end_str}"
+        # Ensure startDateTime < endDateTime for API
+        t_min = min(start_dt, end_dt).isoformat() + 'Z'
+        t_max = max(start_dt, end_dt).isoformat() + 'Z'
         
-        print(f"[Outlook] Fetching events from {now_str} to {end_str}...")
+        url = f"https://graph.microsoft.com/v1.0/me/calendar/calendarView?startDateTime={t_min}&endDateTime={t_max}"
+        
+        print(f"[Outlook] Fetching events from {t_min} to {t_max}...")
         try:
             headers = self.fetcher._get_headers()
             response = requests.get(url, headers=headers)
@@ -148,11 +154,13 @@ class OutlookCalendarClient:
             print(f"[Outlook] Calendar Event Fetch Error: {e}")
         return []
 
-    def create_event(self, subject: str, start_time: str, end_time: str, body_preview: str = "", attendees: List[str] = []) -> Dict:
+    def create_event(self, subject: str, start_time: str, end_time: str, body_preview: str = "", attendees: List[str] = [], send_updates: bool = True) -> Dict:
         """Create a new event on Outlook Calendar"""
         if not self.connect(): return {"success": False, "error": "Not connected"}
         
         url = "https://graph.microsoft.com/v1.0/me/events"
+        if not send_updates:
+            url += "?sendInvitations=none"
         
         event = {
             "subject": subject,

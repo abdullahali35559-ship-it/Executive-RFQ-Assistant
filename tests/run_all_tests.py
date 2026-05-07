@@ -3,7 +3,8 @@ Run All Tests - RFQ Agent
 Execute all module tests sequentially
 """
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.getcwd())
 
 print("=" * 60)
 print("RFQ AGENT - COMPLETE TEST SUITE")
@@ -16,9 +17,9 @@ print("-" * 60)
 from test_email_detection import test_tender_email, test_non_tender_email
 try:
     test1 = test_tender_email() and test_non_tender_email()
-    print("✅ Email Detection: PASSED\n")
+    print("[OK] Email Detection: PASSED\n")
 except Exception as e:
-    print(f"❌ Email Detection: FAILED - {e}\n")
+    print(f"[FAIL] Email Detection: FAILED - {e}\n")
     test1 = False
 
 # Test 2: Document Classifier
@@ -29,7 +30,7 @@ try:
     test2 = test_classification()
     print()
 except Exception as e:
-    print(f"❌ Document Classification: FAILED - {e}\n")
+    print(f"[FAIL] Document Classification: FAILED - {e}\n")
     test2 = False
 
 # Test 3: File Manager
@@ -40,7 +41,7 @@ try:
     test3 = test_file_manager()
     print()
 except Exception as e:
-    print(f"❌ File Manager: FAILED - {e}\n")
+    print(f"[FAIL] File Manager: FAILED - {e}\n")
     test3 = False
 
 # Test 4: RFI Generator
@@ -51,7 +52,7 @@ try:
     test4 = test_rfi_generator()
     print()
 except Exception as e:
-    print(f"❌ RFI Generator: FAILED - {e}\n")
+    print(f"[FAIL] RFI Generator: FAILED - {e}\n")
     test4 = False
 
 # Test 5: Metadata Extractor
@@ -62,7 +63,7 @@ try:
     test5 = test_metadata_extraction()
     print()
 except Exception as e:
-    print(f"❌ Metadata Extractor: FAILED - {e}\n")
+    print(f"[FAIL] Metadata Extractor: FAILED - {e}\n")
     test5 = False
 
 # Summary
@@ -79,7 +80,7 @@ test_names = [
 ]
 
 for name, passed in zip(test_names, tests):
-    status = "✅ PASSED" if passed else "❌ FAILED"
+    status = "[OK] PASSED" if passed else "[FAIL] FAILED"
     print(f"{name:30} {status}")
 
 total_passed = sum(tests)
@@ -87,6 +88,6 @@ print()
 print(f"Total: {total_passed}/{len(tests)} tests passed")
 
 if total_passed == len(tests):
-    print("\n🎉 ALL TESTS PASSED! RFQ Agent is ready!")
+    print("\n[SUCCESS] ALL TESTS PASSED! RFQ Agent is ready!")
 else:
     print(f"\n⚠️ {len(tests) - total_passed} test(s) failed. Please review.")

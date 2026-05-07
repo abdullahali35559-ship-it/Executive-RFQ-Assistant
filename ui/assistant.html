@@ -413,6 +413,58 @@
             background: #eee;
             color: var(--accent-red);
         }
+        /* Intelligence Mode Toggle */
+        .mode-toggle-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: var(--space-4);
+            padding: 4px;
+            background: #f1f3f4;
+            border-radius: 30px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+            border: 1px solid var(--border-light);
+        }
+
+        .mode-btn {
+            padding: 8px 24px;
+            border-radius: 25px;
+            border: none;
+            background: transparent;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mode-btn.active {
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            color: var(--text-primary);
+        }
+
+        .mode-btn.active.rfi-mode {
+            color: var(--primary-orange);
+        }
+
+        .mode-btn.active.general-mode {
+            color: #6366f1; /* Indigo for General */
+        }
+
+        .mode-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .rfi-mode .mode-indicator { background: var(--primary-orange); }
+        .general-mode .mode-indicator { background: #6366f1; }
     </style>
 </head>
 
@@ -445,8 +497,7 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
-                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
-                    class="btn btn-secondary btn-sm"
+                <button onclick="Auth.logout()" class="btn btn-secondary btn-sm"
                     style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
                     Sign Out
                 </button>
@@ -580,6 +631,20 @@
 
                 <!-- Chat Main Area -->
                 <div class="chat-main">
+                    <!-- Mode Toggle Header -->
+                    <div style="padding: 12px; border-bottom: 1px solid var(--border-light); background: white;">
+                        <div class="mode-toggle-container">
+                            <button class="mode-btn active rfi-mode" id="btnRFIMode" onclick="setMode('enterprise')">
+                                <span class="mode-indicator"></span>
+                                RFI Assistant
+                            </button>
+                            <button class="mode-btn general-mode" id="btnGeneralMode" onclick="setMode('general')">
+                                <span class="mode-indicator"></span>
+                                General Assistant
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="chat-messages" id="chatMessages">
                         <div class="empty-state">
                             <div class="empty-icon">
@@ -647,8 +712,8 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
+    <script src="js/auth.js?v=2.4"></script>
+    <script src="js/api.js?v=2.4"></script>
     <script>
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -661,6 +726,43 @@
 
         let currentContext = null;
         let currentConversationId = null;
+        let currentMode = 'enterprise'; // Default to RFI Assistant
+
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // Update UI
+            document.getElementById('btnRFIMode').classList.toggle('active', mode === 'enterprise');
+            document.getElementById('btnGeneralMode').classList.toggle('active', mode === 'general');
+            
+            // Visual cues
+            const sendBtn = document.getElementById('sendBtn');
+            if (mode === 'general') {
+                sendBtn.style.background = '#6366f1';
+                document.querySelector('.input-wrapper').style.focusWithinBorderColor = '#6366f1';
+            } else {
+                sendBtn.style.background = 'var(--primary-orange)';
+            }
+
+            // Update empty state if visible
+            const emptyState = document.querySelector('.empty-state');
+            if (emptyState) {
+                if (mode === 'general') {
+                    emptyState.querySelector('h2').textContent = "General AI Assistant";
+                    emptyState.querySelector('p').textContent = "Ask me anything - I work like ChatGPT, Gemini, or Claude.";
+                } else {
+                    emptyState.querySelector('h2').textContent = "RFI Executive Assistant";
+                    emptyState.querySelector('p').textContent = "I have full knowledge of your emails, meetings, and business documents.";
+                }
+            }
+            
+            console.log(`[Assistant] Mode switched to: ${mode}`);
+            
+            // Reload conversations for this mode
+            currentConversationId = null;
+            loadConversations(mode);
+            startNewChat();
+        }
 
         document.addEventListener('DOMContentLoaded', async () => {
             console.log('RFI page loaded...');
@@ -694,9 +796,9 @@
             }
         }
 
-        async function loadConversations() {
+        async function loadConversations(mode = currentMode) {
             try {
-                const response = await window.RFQAgentAPI.getConversations();
+                const response = await window.RFQAgentAPI.getConversations(mode);
                 if (response.success) {
                     convList.innerHTML = '';
                     if (response.data.length === 0) {
@@ -799,11 +901,13 @@
             chatInput.style.height = 'auto';
 
             // Show typing indicator
-            const typingId = showTypingStatus();
+            const indicatorId = showTypingStatus();
 
             try {
-                const response = await window.RFQAgentAPI.askAssistant(text, currentContext, currentConversationId);
-                removeTypingStatus(typingId);
+                const response = await window.RFQAgentAPI.askAssistant(text, currentContext, currentConversationId, currentMode);
+                
+                // Remove indicator using ID
+                removeTypingStatus(indicatorId);
 
                 if (response.success) {
                     appendMessage('assistant', response.response);

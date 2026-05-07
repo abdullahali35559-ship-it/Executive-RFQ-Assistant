@@ -2,15 +2,24 @@
 let forceDisplayUntil = 0;
 
 // Initialize dashboard when page loads
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[Dashboard] Executive Assistant Dashboard Initializing...');
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Dashboard] Script loaded, checking API availability...');
+    if (window.RFQAgentAPIReady) {
+        initDashboard();
+    } else {
+        window.addEventListener('RFQAgentAPIReady', initDashboard);
+    }
+});
 
-    // Load initial data
-    await loadDashboardData();
+async function initDashboard() {
+    console.log('[Dashboard] API Ready. Initializing Executive Assistant Dashboard...');
 
-    // Start polling loops
-    setInterval(loadDashboardData, 15000); // Main stats every 15s
-    setInterval(checkAgentStatus, 5000);   // Agent status every 5s
+    // Load initial data (NON-BLOCKING for instant UI feel)
+    loadDashboardData();
+
+    // Start a single, persistent polling interval
+    setInterval(loadDashboardData, 30000); // Main stats every 30s
+    setInterval(checkAgentStatus, 2000);    // Agent status every 2s (Faster for better UX)
 
     // Welcome message time-awareness
     const hours = new Date().getHours();
@@ -20,23 +29,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (hours < 18) welcome.textContent = "Good afternoon, Abdullah. Here is your priority list.";
         else welcome.textContent = "Good evening, Abdullah. Here is your priority list.";
     }
-});
+
+    // Initialize Flatpickr for booking modal
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr('#bookingDate', {
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            defaultDate: "today"
+        });
+        flatpickr('#bookingTime', {
+            enableTime: true,
+            noCalendar: true,
+            dateFormat: "H:i",
+            defaultDate: "09:00"
+        });
+    }
+    // Initialize session summary
+    applySessionPreset('today');
+}
 
 async function loadDashboardData() {
     try {
-        await Promise.all([
-            loadMorningBrief(),
-            loadPriorityList(),
-            loadPendingDrafts(),
-            loadTasks(),
-            loadAgendaWidget(),
-            loadPulseStats(),
-            loadFollowups()
-        ]);
+        console.log('[Dashboard] Refreshing all data pulses...');
+        // 1. Kick off stats and other independent fetches immediately (NON-BLOCKING)
+        loadPulseStats();
+        loadMorningBrief();
+        loadPriorityList();
+        loadPendingDrafts();
+        loadTasks();
+        loadFollowups();
+
+        // 2. Calendar data is shared, so we fetch it once then update dependent widgets
+        window.RFQAgentAPI.getCalendarEvents(7).then(response => {
+            const calendarData = response.success ? response.data : [];
+            loadAgendaWidget(calendarData);
+            loadHoldQueue(calendarData);
+        }).catch(err => console.error('[Dashboard] Calendar load error:', err));
+
     } catch (e) {
         console.error('[Dashboard] Data load error:', e);
     }
 }
+
 
 async function loadMorningBrief() {
     const container = document.getElementById('morningBriefContainer');
@@ -53,96 +87,239 @@ async function loadMorningBrief() {
 }
 
 async function triggerSync() {
-    const btn = document.getElementById('btnSyncAll');
-    const syncContainer = document.getElementById('syncProgressContainer');
+    const btnSync = document.getElementById('btnSyncAll');
+    const panel = document.getElementById('syncProgressContainer');
     const syncBar = document.getElementById('syncProgressBar');
     const syncPercent = document.getElementById('syncPercentLabel');
+    const syncStatus = document.getElementById('progressTitleText');
 
-    if (!btn || !syncContainer) return;
-
-    const originalContent = btn.innerHTML;
-    btn.disabled = true;
+    if (!btnSync || !panel) return;
 
     // Show the progress panel
-    syncContainer.style.display = 'block';
-    syncContainer.style.animation = 'slideDown 0.4s ease-out';
-
+    panel.style.display = 'block';
+    
     // Reset Progress
-    syncBar.style.width = '0%';
-    syncPercent.textContent = '0%';
+    if (syncBar) syncBar.style.width = '0%';
+    if (syncPercent) syncPercent.textContent = '0%';
+    if (syncStatus) syncStatus.textContent = 'Syncing Intelligence...';
+    btnSync.disabled = true;
 
-    // Start status polling
-    const statusInterval = setInterval(async () => {
-        try {
-            const status = await window.RFQAgentAPI.getAgentStatus();
-            if (status.active) {
-                // Calculate percentage
-                let percent = 0;
-                if (status.total > 0) {
-                    percent = Math.round((status.current / status.total) * 100);
-                } else {
-                    percent = 5;
-                }
-
-                // Update UI
-                syncBar.style.width = percent + '%';
-                syncPercent.textContent = percent + '%';
-
-                // Update Button Spinner
-                btn.innerHTML = `
-                    <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="margin-right:8px; animation: spin 1s linear infinite;">
-                        <path d="M21 12a9 9 0 11-6.219-8.56"></path>
-                    </svg>
-                    Syncing ${percent}%
-                `;
-            }
-        } catch (e) {
-            console.warn('Backend link lost or error. Hiding sync bar.');
-            syncContainer.style.display = 'none';
-            // Clear interval if error persists to save resources
-        }
-    }, 1000);
+    forceDisplayUntil = Date.now() + 10000; // Stay visible for 10s grace
 
     try {
-        const response = await window.RFQAgentAPI.processEmails();
-
-        // Wait a tiny bit for the last 100% to show
-        setTimeout(async () => {
-            clearInterval(statusInterval);
-
-            if (response.success) {
-                syncBar.style.width = '100%';
-                syncPercent.textContent = '100%';
-
-                showNotice('Sync Complete: ' + (response.processed || 0) + ' items');
-
-                // Refresh data
-                await loadDashboardData();
-
-                // Hide panel after 3 seconds
-                setTimeout(() => {
-                    syncContainer.style.animation = 'fadeOut 0.5s ease-in forwards';
-                    setTimeout(() => {
-                        syncContainer.style.display = 'none';
-                        btn.disabled = false;
-                        btn.innerHTML = originalContent;
-                    }, 500);
-                }, 3000);
-            } else {
-                clearInterval(statusInterval);
-                syncContainer.style.display = 'none';
-                btn.disabled = false;
-                btn.innerHTML = originalContent;
-                showError('Sync Error: ' + (response.error || 'Unknown error'));
-            }
-        }, 1000);
-
+        console.log("ELITE-SYNC: Triggering Agent...");
+        await window.RFQAgentAPI.processEmails();
+        
+        // Call status check immediately for instant feedback
+        checkAgentStatus();
     } catch (e) {
-        clearInterval(statusInterval);
-        syncContainer.style.display = 'none';
-        btn.disabled = false;
-        btn.innerHTML = originalContent;
-        showError('Network Error during sync');
+        console.error("Sync trigger failed", e);
+        if (panel) panel.style.display = 'none';
+        if (btnSync) btnSync.disabled = false;
+    }
+}
+
+let lastLogTimestamp = null;
+
+async function checkAgentStatus() {
+    try {
+        const response = await window.RFQAgentAPI.getAgentStatus();
+        const panel = document.getElementById('syncProgressContainer');
+        const syncBar = document.getElementById('syncProgressBar');
+        const syncPercent = document.getElementById('syncPercentLabel');
+        const syncStatus = document.getElementById('progressTitleText');
+        const btnSync = document.getElementById('btnSyncAll');
+
+        if (!panel) return;
+
+        const isRecentlyTriggered = Date.now() < forceDisplayUntil;
+
+        if (response.active || isRecentlyTriggered) {
+            panel.style.display = 'block';
+            
+            // Calculate percentage
+            let percent = 5;
+            if (response.total > 0) {
+                percent = Math.round((response.current / response.total) * 90) + 10;
+            } else if (response.status && (response.status.includes('No new emails') || response.status.includes('Complete'))) {
+                percent = 100;
+            } else if (response.status && response.status.includes('Fetching')) {
+                percent = 15;
+            } else if (response.status && response.status.includes('Analyzing')) {
+                percent = 30;
+            }
+
+            if (percent > 100) percent = 100;
+
+            if (syncBar) {
+                syncBar.style.width = percent + '%';
+                if (percent === 100) {
+                    syncBar.classList.add('bg-success');
+                    syncBar.style.background = 'linear-gradient(90deg, #10b981, #34d399)';
+                } else {
+                    syncBar.classList.remove('bg-success');
+                    syncBar.style.background = '';
+                }
+            }
+            
+            if (syncPercent) syncPercent.textContent = percent + '%';
+            
+            if (percent === 100) {
+                // Keep visible for a bit after reaching 100%
+                if (btnSync) btnSync.disabled = false;
+                
+                // If it just finished, refresh data
+                if (response.active === false && isRecentlyTriggered) {
+                    // Start cooling down the "force display" so it closes in 3 seconds
+                    if (!window._syncFinishTime) {
+                        window._syncFinishTime = Date.now();
+                        loadDashboardData();
+                    }
+                    
+                    // After 3 seconds of being at 100%, we can allow it to close
+                    if (Date.now() - window._syncFinishTime > 3000) {
+                        forceDisplayUntil = 0;
+                        window._syncFinishTime = null;
+                    }
+                }
+            } else {
+                if (btnSync) btnSync.disabled = true;
+                window._syncFinishTime = null;
+            }
+
+            if (syncStatus) {
+                let newStatus = response.status || 'Syncing...';
+                if (percent === 100 && !newStatus.includes('Error')) {
+                    newStatus = "✅ Sync Complete. Dashboard Updated.";
+                }
+                if (syncStatus.textContent !== newStatus) {
+                    syncStatus.textContent = newStatus;
+                }
+                
+                if (newStatus.includes('Error')) {
+                    syncStatus.style.color = '#ef4444';
+                    syncStatus.style.fontWeight = '700';
+                } else {
+                    syncStatus.style.color = '';
+                    syncStatus.style.fontWeight = '';
+                }
+            }
+
+        } else {
+            // Task is not active and force-display has expired
+            panel.style.display = 'none';
+            if (btnSync) btnSync.disabled = false;
+        }
+    } catch (e) {
+        console.warn('[StatusPoller] Error:', e);
+    }
+}
+
+async function loadPulseStats() {
+    try {
+        const stats = await window.RFQAgentAPI.getDashboardStats();
+        if (stats.success) {
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val !== undefined ? val : '0';
+            };
+            setVal('statActiveTenders', stats.activeTenders);
+            setVal('statUnprocessed', stats.unprocessedCount);
+            setVal('statIncomplete', stats.incompleteTenders);
+            setVal('statUrgent', stats.urgentCount);
+        }
+    } catch (e) { console.error('Stats load error:', e); }
+}
+
+// ── SESSION SUMMARY LOGIC ──────────────────────────────────────────────────
+
+function toLocalISOString(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function applySessionPreset(preset) {
+    const now = new Date();
+    let from, to;
+
+    if (preset === 'today') {
+        from = new Date(now); from.setHours(0, 0, 0, 0);
+        to = new Date(now); to.setHours(23, 59, 59, 999);
+    } else if (preset === '8h') {
+        from = new Date(now.getTime() - 8 * 60 * 60 * 1000);
+        to = now;
+    } else if (preset === '24h') {
+        from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        to = now;
+    } else if (preset === 'week') {
+        from = new Date(now); from.setDate(now.getDate() - 7); from.setHours(0, 0, 0, 0);
+        to = now;
+    }
+
+    document.getElementById('sessionFrom').value = toLocalISOString(from);
+    document.getElementById('sessionTo').value = toLocalISOString(to);
+
+    // Update button styles
+    ['8h', '24h', 'today', 'week'].forEach(p => {
+        const btn = document.getElementById(`preset-${p}`);
+        if (btn) {
+            btn.classList.toggle('btn-primary', p === preset);
+            btn.classList.toggle('btn-secondary', p !== preset);
+        }
+    });
+
+    loadSessionSummary();
+}
+
+async function loadSessionSummary() {
+    const fromValRaw = document.getElementById('sessionFrom').value;
+    const toValRaw = document.getElementById('sessionTo').value;
+    const results = document.getElementById('sessionResults');
+
+    if (!fromValRaw || !toValRaw) return;
+
+    results.innerHTML = `<div style="text-align:center;padding:1.5rem;color:var(--text-muted);">
+        <div class="spinner-small" style="margin:0 auto 10px;"></div>
+        Analyzing construction pulse...
+    </div>`;
+
+    try {
+        const fromVal = new Date(fromValRaw).toISOString();
+        const toVal = new Date(toValRaw).toISOString();
+
+        const data = await window.RFQAgentAPI.getSessionSummary(fromVal, toVal);
+
+        if (data.count === 0) {
+            results.innerHTML = `
+                <div style="text-align:center;padding:2rem;color:var(--text-muted);">
+                    <p style="font-size:0.85rem;">No tender emails processed in this time window.</p>
+                </div>`;
+            return;
+        }
+
+        const rows = data.data.map(e => `
+            <div class="activity-item" style="display:grid;grid-template-columns: 1fr auto; padding: 12px 16px; border-bottom: 1px solid #f3f4f6;">
+                <div>
+                    <div style="font-weight:600;font-size:0.85rem;color:var(--text-primary);">${e.subject || '(No Subject)'}</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
+                        From: ${e.sender} &nbsp;·&nbsp; Processed: ${new Date(e.processed_at).toLocaleTimeString()}
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    ${e.thread_id ? `<span class="badge" style="background:#fff4f0; color:var(--primary-orange); border:1px solid #ffd5cc; font-size:0.65rem;">${e.thread_id}</span>` : ''}
+                    <span class="badge" style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; font-size:0.65rem;">${e.doc_count} Docs</span>
+                </div>
+            </div>
+        `).join('');
+
+        results.innerHTML = `
+            <div style="font-size:0.7rem; color:var(--text-muted); padding:8px 16px; background:#f8fafc; border-bottom:1px solid #e5e7eb; font-weight:600; text-transform:uppercase;">
+                Identified ${data.count} Tender Activity Pulse(s)
+            </div>
+            ${rows}
+        `;
+    } catch (err) {
+        results.innerHTML = `<div style="padding:1rem;color:var(--accent-red);font-size:0.8rem;">Error: ${err.message}</div>`;
     }
 }
 
@@ -169,8 +346,15 @@ async function loadTasks() {
     if (!list) return;
 
     try {
+        console.log('[Dashboard] Loading tasks...');
         const response = await window.RFQAgentAPI.getTasks();
-        if (response.success && response.data.length > 0) {
+        console.log('[Dashboard] Tasks response:', response);
+
+        if (!response || !response.success) {
+            throw new Error(response ? response.error : 'No response from API');
+        }
+
+        if (response.data && response.data.length > 0) {
             list.innerHTML = response.data.map(t => `
                 <div class="activity-item" style="padding: 12px 16px; align-items: center;">
                     <div class="activity-icon-wrapper" style="background: rgba(156, 39, 176, 0.05);">
@@ -185,7 +369,13 @@ async function loadTasks() {
         } else {
             list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.8rem;">No action items identified.</div>`;
         }
-    } catch (e) { console.error('Tasks load error:', e); }
+    } catch (e) { 
+        console.error('Tasks load error:', e); 
+        list.innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--accent-red); font-size: 0.8rem;">
+            Failed to load tasks.<br>
+            <small style="opacity: 0.7;">Error: ${e.message}</small>
+        </div>`;
+    }
 }
 
 async function loadPriorityList() {
@@ -200,7 +390,7 @@ async function loadPriorityList() {
             ).slice(0, 10); // Increase slice to see more
 
             if (priorities.length === 0) {
-                list.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><p style="font-size: 0.85rem;">No immediate actions required. You are up to date! 🎉</p></div>`;
+                list.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><p style="font-size: 0.85rem;">No immediate actions required. You are up to date.</p></div>`;
                 return;
             }
 
@@ -277,56 +467,155 @@ async function loadPendingDrafts() {
     } catch (e) { console.error('Drafts load error:', e); }
 }
 
-async function loadAgendaWidget() {
+async function loadAgendaWidget(eventsData = null) {
     const list = document.getElementById('agendaWidgetList');
+    if (!list) return;
+
     try {
-        // Fetch next 7 days to show coming up meetings
-        const response = await window.RFQAgentAPI.getCalendarEvents(7);
-        if (response.success) {
-            const now = new Date();
-            const upcomingEvents = response.data.filter(ev => {
-                if (!ev.start) return false;
-                const evDate = new Date(ev.start);
-                if (isNaN(evDate.getTime())) return false;
-                // Show meetings from today onwards
-                const diff = (evDate - now) / (1000 * 60 * 60 * 24);
-                return diff >= -0.5 && diff <= 7;
-            }).sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 5);
+        // Use provided data or fetch if missing
+        let events = eventsData;
+        if (!events) {
+            const response = await window.RFQAgentAPI.getCalendarEvents(7);
+            events = response.success ? response.data : [];
+        }
 
-            const titleEl = document.querySelector('#agendaWidgetList').previousElementSibling.querySelector('.card-title');
+        const now = new Date();
+        const upcomingEvents = events.filter(ev => {
+            if (!ev.start) return false;
+            const evDate = new Date(ev.start);
+            if (isNaN(evDate.getTime())) return false;
+            // Show meetings from today onwards
+            const diff = (evDate - now) / (1000 * 60 * 60 * 24);
+            return diff >= -0.5 && diff <= 7;
+        }).sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 5);
+
+        // Safe title update
+        const container = list.closest('.recent-activity');
+        if (container) {
+            const titleEl = container.querySelector('.card-title');
             if (titleEl) titleEl.textContent = "Coming Up on Calendar";
+        }
 
-            if (upcomingEvents.length === 0) {
-                list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">
-                    <p style="font-size: 0.85rem;">No meetings scheduled for this week.</p>
-                </div>`;
-                return;
-            }
+        if (upcomingEvents.length === 0) {
+            list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">
+                <p style="font-size: 0.85rem;">No meetings scheduled for this week.</p>
+            </div>`;
+            return;
+        }
 
-            list.innerHTML = upcomingEvents.map(ev => {
-                const startDate = new Date(ev.start);
-                const timeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const isToday = startDate.toDateString() === now.toDateString();
-                const dayStr = isToday ? 'Today' : startDate.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+        list.innerHTML = upcomingEvents.map(ev => {
+            const startDate = new Date(ev.start);
+            const timeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const isToday = startDate.toDateString() === now.toDateString();
+            const dayStr = isToday ? 'Today' : startDate.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+            const isHold = ev.title.includes('[HOLD]');
 
-                return `
-                    <div class="activity-item" style="padding: 10px 16px;">
-                        <div style="width: 70px; font-weight: 700; font-size: 0.75rem; color: var(--primary-orange); line-height: 1.2;">
-                            <div>${timeStr}</div>
-                            <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 400;">${dayStr}</div>
+            const attendees = ev.attendees || [];
+            const attendeeText = attendees.length > 0 ? `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">With: ${attendees.map(a => a.name || a.email.split('@')[0]).join(', ')}</div>` : '';
+
+            return `
+                <div class="activity-item" style="padding: 12px 16px; ${isHold ? 'background: rgba(255, 92, 53, 0.04);' : ''}">
+                    <div style="width: 70px; font-weight: 700; font-size: 0.75rem; color: ${isHold ? 'var(--text-muted)' : 'var(--primary-orange)'}; line-height: 1.2;">
+                        <div>${timeStr}</div>
+                        <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 400;">${dayStr}</div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary);">
+                            ${isHold ? '<span style="color: var(--primary-orange); font-size: 0.65rem; background: #FFF4F0; padding: 1px 4px; border-radius: 4px; margin-right: 4px;">HOLD</span>' : ''}
+                            ${ev.title.replace('[HOLD]', '')}
                         </div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary);">${ev.title}</div>
-                            <div style="font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-                                <div style="width: 6px; height: 6px; border-radius: 50%; background: ${ev.color}; opacity: 0.8;"></div>
-                                ${ev.source}
-                            </div>
+                        ${attendeeText}
+                        <div style="font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: ${ev.color}; opacity: 0.8;"></div>
+                            ${ev.source}
                         </div>
                     </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) { console.error('Agenda load error:', e); }
+}
+
+async function loadHoldQueue(eventsData = null) {
+    const card = document.getElementById('approvalCenterCard');
+    const list = document.getElementById('holdQueueList');
+    const badge = document.getElementById('holdCountBadge');
+    if (!card || !list) return;
+
+    try {
+        let events = eventsData;
+        if (!events) {
+            const response = await window.RFQAgentAPI.getCalendarEvents(7);
+            events = response.success ? response.data : [];
+        }
+        
+        const holds = events.filter(ev => ev.title.includes('[HOLD]'));
+
+        if (badge) badge.textContent = `${holds.length} Pending`;
+        card.style.display = holds.length > 0 ? 'block' : 'none';
+        
+        if (holds.length === 0) return;
+
+        list.innerHTML = holds.map(h => {
+                const attendees = h.attendees || [];
+                const attendeeLabel = attendees.length > 0
+                    ? `<div style="font-size:0.75rem; color:var(--text-secondary); background:rgba(0,0,0,0.03); padding:4px 8px; border-radius:6px; margin-top:8px; display:inline-block;">
+                        <strong>Participants:</strong> ${attendees.map(a => a.name || a.email.split('@')[0]).join(', ')}
+                       </div>`
+                    : '<div style="font-size:0.7rem; color:var(--text-muted); margin-top:8px; font-style:italic;">No other participants added</div>';
+
+                return `
+                <div class="activity-item" style="padding: 16px; flex-direction: column; align-items: flex-start; gap: 10px; border-left: 3px solid var(--primary-orange);">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: flex-start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">${h.title.replace('[HOLD]', '').trim()}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                                Scheduled: ${new Date(h.start).toLocaleString()} (${h.source})
+                            </div>
+                            ${attendeeLabel}
+                        </div>
+                        <div class="badge" style="background: rgba(255, 92, 53, 0.1); color: var(--primary-orange); font-weight: 700; letter-spacing: 0.5px;">PENDING APPROVAL</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; width: 100%; margin-top: 5px;">
+                        <button class="btn btn-primary btn-sm" onclick="confirmHold('${h.source}', '${h.id}')" style="flex: 1; font-size: 0.78rem; padding: 10px; font-weight: 600;">
+                            Approve & Notify Client
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="RFQAgentAPI.deleteCalendarEvent('${h.source}', '${h.id}').then(() => loadDashboardData())" style="padding: 10px; border-color: #fecaca; background: #fef2f2; color: #ef4444;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
+                        </button>
+                    </div>
+                </div>
                 `;
             }).join('');
+    } catch (e) {
+        console.error('[HoldQueue] Error loading:', e);
+    }
+}
+
+async function confirmHold(provider, eventId) {
+    try {
+        showLoading('Confirming meeting & sending notifications...');
+        const resp = await fetch(`${window.location.origin}/api/calendar/events/confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ provider, event_id: eventId })
+        });
+        const result = await resp.json();
+        hideLoading();
+
+        if (result.success) {
+            showToast('Meeting confirmed! The client has been notified.', 'success');
+            loadDashboardData();
+        } else {
+            showError('Confirmation failed: ' + result.error);
         }
-    } catch (e) { console.error('Agenda load error:', e); }
+    } catch (e) {
+        hideLoading();
+        showError('Network error during confirmation.');
+    }
 }
 
 async function loadPulseStats() {
@@ -334,14 +623,96 @@ async function loadPulseStats() {
         const response = await window.RFQAgentAPI.getDashboardStats();
         if (response.success) {
             console.log('[Dashboard] Pulse Stats updated:', response.data);
+            
+            // Update the new top stats grid
+            if (document.getElementById('statActiveTenders')) {
+                document.getElementById('statActiveTenders').textContent = response.data.activeTenders || 0;
+            }
+            if (document.getElementById('statUnprocessed')) {
+                document.getElementById('statUnprocessed').textContent = response.data.unprocessedEmails || 0;
+            }
+            if (document.getElementById('statIncomplete')) {
+                document.getElementById('statIncomplete').textContent = response.data.incompleteTenders || 0;
+            }
+            if (document.getElementById('statUrgent')) {
+                document.getElementById('statUrgent').textContent = response.data.urgentTasks || 0;
+            }
+
+            // Update footer pulse numbers if they exist
             if (document.getElementById('totalPulledNum')) {
                 document.getElementById('totalPulledNum').textContent = response.data.unprocessedEmails || 0;
             }
             if (document.getElementById('totalMeetingsNum')) {
                 document.getElementById('totalMeetingsNum').textContent = response.data.calendarEvents || 0;
             }
+
+            // Populate the specialized construction widgets
+            renderMissingCategories(response.data.topMissingCategories || []);
+            loadProjectPulse();
         }
-    } catch (e) { }
+    } catch (e) { console.error('Pulse stats error:', e); }
+}
+
+function renderMissingCategories(data) {
+    const list = document.getElementById('missingCategoriesList');
+    if (!list) return;
+
+    if (!data || data.length === 0) {
+        list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.8rem;">No systemic document deficits detected.</div>`;
+        return;
+    }
+
+    list.innerHTML = data.map(cat => `
+        <div style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+                <span style="font-weight: 600; color: var(--text-primary);">${cat.category}</span>
+                <span style="color: #f59e0b; font-weight: 700;">${cat.count} Missing</span>
+            </div>
+            <div style="height: 6px; background: #fef3c7; border-radius: 3px; overflow: hidden;">
+                <div style="height: 100%; width: ${Math.min(cat.count * 10, 100)}%; background: #f59e0b;"></div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadProjectPulse() {
+    const list = document.getElementById('projectPulseList');
+    if (!list) return;
+
+    try {
+        const response = await window.RFQAgentAPI.getThreads();
+        if (response.success) {
+            // Get threads with meta_data (deadline or location)
+            const pulseData = response.data.filter(t => t.meta_data && (t.meta_data.submission_deadline || t.meta_data.location)).slice(0, 5);
+
+            if (pulseData.length === 0) {
+                list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.8rem;">No project intelligence extracted yet.</div>`;
+                return;
+            }
+
+            list.innerHTML = pulseData.map(t => {
+                const meta = t.meta_data;
+                const deadline = meta.submission_deadline ? new Date(meta.submission_deadline) : null;
+                const deadlineStr = deadline && !isNaN(deadline.getTime()) ? deadline.toLocaleDateString() : (meta.submission_deadline || 'N/A');
+                
+                return `
+                    <div style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 4px;">${t.subject}</div>
+                        <div style="display: flex; gap: 15px; font-size: 0.75rem;">
+                            <div style="display: flex; align-items: center; gap: 4px; color: #ef4444; font-weight: 600;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                Due: ${deadlineStr}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 4px; color: var(--text-muted);">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                ${meta.location || 'Unknown'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    } catch (e) { console.error('Project pulse error:', e); }
 }
 
 async function loadFollowups() {
@@ -350,16 +721,24 @@ async function loadFollowups() {
     if (!list) return;
 
     try {
-        const followups = await window.RFQAgentAPI.getFollowups();
+        console.log('[Dashboard] Loading follow-ups...');
+        const response = await window.RFQAgentAPI.getFollowups();
+        console.log('[Dashboard] Follow-ups response:', response);
+
+        if (!response || !response.success) {
+            throw new Error(response ? response.error : 'No response from API');
+        }
+
+        const followups = response.data || [];
 
         if (badge) {
             badge.textContent = `${followups.length} Pending`;
             badge.style.display = followups.length > 0 ? 'inline-block' : 'none';
         }
 
-        if (!followups || followups.length === 0) {
+        if (followups.length === 0) {
             list.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem;">
-                <p>No stale threads detected. All caught up! ✨</p>
+                <p>No stale threads detected. All threads are current.</p>
             </div>`;
             return;
         }
@@ -377,7 +756,7 @@ async function loadFollowups() {
                 </div>
                 
                 <div style="background: var(--bg-light); padding: 12px; border-radius: 8px; width: 100%; font-size: 0.8rem; border: 1px solid var(--border-light); line-height: 1.4; color: var(--text-secondary);">
-                    "${f.suggested_body.substring(0, 150)}${f.suggested_body.length > 150 ? '...' : ''}"
+                    "${(f && f.suggested_body) ? f.suggested_body.substring(0, 150) + (f.suggested_body.length > 150 ? '...' : '') : 'No suggestion available'}"
                 </div>
                 
                 <div style="display: flex; gap: 8px; margin-top: 4px; width: 100%;">
@@ -393,7 +772,10 @@ async function loadFollowups() {
 
     } catch (e) {
         console.error('[Dashboard] Follow-up load error:', e);
-        list.innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--accent-red); font-size: 0.8rem;">Failed to load follow-up suggestions.</div>`;
+        list.innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--accent-red); font-size: 0.8rem;">
+            Failed to load follow-up suggestions.<br>
+            <small style="opacity: 0.7;">Error: ${e.message}</small>
+        </div>`;
     }
 }
 
@@ -544,12 +926,13 @@ async function handleBookingSubmit(event) {
             end_time: end.toISOString(),
             provider: document.getElementById('bookingProvider').value,
             description: `Booked via Dashboard Suggestion for Thread: ${currentBookingThreadId}`,
-            thread_id: currentBookingThreadId
+            thread_id: currentBookingThreadId,
+            notify_guests: document.getElementById('bookingNotifyGuests').checked
         };
 
         const result = await window.RFQAgentAPI.createCalendarEvent(meetingData);
         if (result.success) {
-            showSuccess('Meeting scheduled successfully! 📅');
+            showSuccess('Meeting scheduled successfully.');
             closeBookingModal();
             loadDashboardData();
         } else {
@@ -563,113 +946,10 @@ async function handleBookingSubmit(event) {
     }
 }
 
-// Load recent activity - empty for compat
 async function loadRecentActivity() { }
+// Redundant session summary code removed.
 
-// ── SESSION SUMMARY WIDGET ────────────────────────────────────────────────
 
-function toLocalISOString(d) {
-    // Returns YYYY-MM-DDTHH:MM suitable for datetime-local input
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function applyPreset(preset) {
-    const now = new Date();
-    let from, to;
-
-    if (preset === 'today') {
-        from = new Date(now); from.setHours(0, 0, 0, 0);
-        to = new Date(now); to.setHours(23, 59, 59, 999);
-    } else if (preset === '8h') {
-        from = new Date(now.getTime() - 8 * 60 * 60 * 1000);
-        to = now;
-    } else if (preset === '24h') {
-        from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        to = now;
-    } else if (preset === 'week') {
-        from = new Date(now); from.setDate(now.getDate() - 7); from.setHours(0, 0, 0, 0);
-        to = now;
-    }
-
-    document.getElementById('sessionFrom').value = toLocalISOString(from);
-    document.getElementById('sessionTo').value = toLocalISOString(to);
-
-    // Highlight active preset button
-    document.querySelectorAll('[id^="preset-"]').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-secondary');
-    });
-    const btn = document.getElementById(`preset-${preset}`);
-    if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary'); }
-
-    loadSessionSummary();
-}
-
-async function loadSessionSummary() {
-    const fromValRaw = document.getElementById('sessionFrom').value;
-    const toValRaw = document.getElementById('sessionTo').value;
-    const results = document.getElementById('sessionResults');
-
-    if (!fromValRaw || !toValRaw) {
-        results.innerHTML = `<p style="color:var(--accent-red);padding:1rem;">Please select both From and To times.</p>`;
-        return;
-    }
-
-    results.innerHTML = `<div style="text-align:center;padding:1.5rem;color:var(--text-muted);">
-        <div style="width:28px;height:28px;border:3px solid #e5e7eb;border-top-color:var(--primary-orange);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>
-        Loading...
-    </div>`;
-
-    try {
-        // Convert local HTML input values to standard UTC ISO strings for backend
-        const fromVal = new Date(fromValRaw).toISOString();
-        const toVal = new Date(toValRaw).toISOString();
-
-        const resp = await fetch(`${window.location.origin}/api/session-summary?from_time=${encodeURIComponent(fromVal)}&to_time=${encodeURIComponent(toVal)}`, {
-            headers: {
-                'Authorization': Auth.getToken() ? `Bearer ${Auth.getToken()}` : ''
-            }
-        });
-        const data = await resp.json();
-
-        if (!data.success) throw new Error(data.detail || 'API error');
-
-        if (data.count === 0) {
-            results.innerHTML = `
-                <div style="text-align:center;padding:2rem;color:var(--text-muted);">
-                    <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 8px;display:block;opacity:0.4"><path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7"/><path d="M4 13h16v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"/></svg>
-                    <p style="font-size:0.9rem;">No communication threads processed in this time window.</p>
-                </div>`;
-            return;
-        }
-
-        const rows = data.data.map(e => `
-            <div class="activity-item" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 16px;">
-                <div>
-                    <div style="font-weight:600;font-size:0.88rem;color:var(--text-primary);">${e.subject || '(No Subject)'}</div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">
-                        From: ${e.sender || '—'} &nbsp;·&nbsp;
-                        Processed: ${e.processed_at ? new Date(e.processed_at).toLocaleString() : '—'}
-                    </div>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-                    ${e.thread_id ? `<span style="background:#FFF4F0;color:var(--primary-orange);font-size:0.72rem;font-weight:700;padding:3px 8px;border-radius:20px;border:1px solid #FFD5CC;">${e.thread_id}</span>` : ''}
-                    <span style="background:#D1FAE5;color:#065F46;font-size:0.72rem;font-weight:600;padding:3px 8px;border-radius:20px;">${e.att_count} file${e.att_count !== 1 ? 's' : ''}</span>
-                </div>
-            </div>`).join('');
-
-        results.innerHTML = `
-            <div style="font-size:0.78rem;color:var(--text-muted);padding:8px 16px;border-bottom:1px solid var(--border-light);background:var(--bg-light);border-radius:var(--radius-md) var(--radius-md) 0 0;">
-                Found <strong>${data.count}</strong> thread${data.count !== 1 ? 's' : ''} processed between
-                <strong>${new Date(fromVal).toLocaleString()}</strong> and <strong>${new Date(toVal).toLocaleString()}</strong>
-            </div>
-            ${rows}`;
-    } catch (err) {
-        results.innerHTML = `<p style="color:var(--accent-red);padding:1rem;">Error: ${err.message}</p>`;
-        console.error('Session summary error:', err);
-    }
-}
 
 // Note: applyPreset('today') is now handled in the main DOMContentLoaded listener
 
@@ -698,45 +978,7 @@ async function processEmails() {
     }
 }
 
-async function checkAgentStatus() {
-    try {
-        const response = await window.RFQAgentAPI.getAgentStatus();
-        const premiumBadge = document.getElementById('premiumStatus');
-        const premiumText = document.getElementById('premiumStatusText');
-
-        if (!premiumBadge) return;
-
-        const isTriggered = Date.now() < forceDisplayUntil;
-
-        if (response.success && (response.is_active || isTriggered)) {
-            premiumBadge.style.display = 'flex';
-
-            const logs = response.latest_logs || [];
-            if (logs.length > 0) {
-                const latest = logs[0];
-                let statusText = "AI is Working...";
-
-                const actionLower = latest.action.toLowerCase();
-                if (actionLower.includes('processing file')) {
-                    const match = latest.action.match(/(\d+)\/(\d+)/);
-                    if (match) statusText = `AI Indexing... ${Math.floor((match[1] / match[2]) * 100)}%`;
-                } else if (actionLower.includes('classifying')) {
-                    statusText = "AI Classifying...";
-                } else if (actionLower.includes('complete')) {
-                    statusText = "AI Sync Complete";
-                    forceDisplayUntil = 0;
-                    setTimeout(() => premiumBadge.style.display = 'none', 5000);
-                }
-
-                premiumText.textContent = statusText;
-            }
-        } else {
-            premiumBadge.style.display = 'none';
-        }
-    } catch (err) {
-        console.error('Error checking agent status:', err);
-    }
-}
+// Duplicate checkAgentStatus removed.
 
 // Quick Action: View Threads
 function viewThreads() {

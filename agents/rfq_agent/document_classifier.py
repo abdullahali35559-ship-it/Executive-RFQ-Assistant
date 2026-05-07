@@ -35,26 +35,38 @@ class DocumentClassifier:
         if 'file_type' not in result:
             result['file_type'] = "Document"
             
-        # Simplified category for the flat structure (all go into "General")
         result['category'] = "General"
         result['confidence'] = 1.0
+        result['raw_text'] = content_preview  # Expose raw text for deep scanning
         
         return result
     
-    def _read_file_preview(self, file_path: str, max_chars: int = 1500) -> str:
-        """Read first 1500 chars of file for context"""
+    def _read_file_preview(self, file_path: str, max_chars: int = 15000) -> str:
+        """Read up to 15000 chars of file for deep analysis"""
         
         if file_path.endswith('.pdf'):
             try:
                 doc = fitz.open(file_path)
                 text = ""
-                for page in doc[:3]: # check first 3 pages
+                for page in doc[:5]: # check first 5 pages for deep intel
                     text += page.get_text()
                 doc.close()
                 return text[:max_chars]
             except:
                 return f"[Could not read PDF: {file_path}]"
         
+        elif file_path.endswith(('.xlsx', '.xls', '.csv')):
+            try:
+                import pandas as pd
+                if file_path.endswith('.csv'):
+                    df = pd.read_csv(file_path).head(100)
+                else:
+                    df = pd.read_excel(file_path).head(100)
+                # Convert to markdown table which LLMs understand perfectly
+                return df.to_markdown(index=False)
+            except Exception as e:
+                return f"[Excel/CSV Read Error: {e}]"
+
         elif file_path.endswith(('.txt', '.md', '.json', '.xml')):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -62,5 +74,5 @@ class DocumentClassifier:
             except:
                 return f"[Could not read text file: {file_path}]"
         
-        # For Excel, images, etc., return filename
+        # For images, etc., return filename
         return f"[Binary file: {file_path}]"

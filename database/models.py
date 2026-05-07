@@ -93,6 +93,7 @@ class Thread(Base):
     source = Column(String(50))
     source_email = Column(String(255))
     source_sender = Column(String(255))
+    meta_data = Column(JSONB)
     
     # Relationships
     contact = relationship('Contact', back_populates='threads')
@@ -105,6 +106,8 @@ class Email(Base):
     id = Column(Integer, primary_key=True)
     thread_id = Column(String(50), index=True) # Link to Thread.thread_id
     email_id = Column(String(255), unique=True)
+    message_id = Column(String(255), index=True) # RFC 2822 Message-ID
+    in_reply_to = Column(String(255), index=True) # Parent Message-ID
     subject = Column(Text)
     sender = Column(String(255))
     recipients = Column(ARRAY(Text))
@@ -128,6 +131,7 @@ class Attachment(Base):
     
     id = Column(Integer, primary_key=True)
     thread_id = Column(String(50), index=True)
+    email_id = Column(String(255), index=True) # Link to specific email
     category = Column(String(100)) # e.g. "01_Instructions", "02_Scope_of_Work"
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
@@ -170,6 +174,7 @@ class DraftReply(Base):
     
     # Link to original email
     in_reply_to_email_id = Column(String(255))
+    meta_data = Column(JSONB)
     scheduled_at = Column(DateTime) # For future "Send Later" feature
 
 class FollowupTask(Base):
@@ -193,8 +198,16 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     full_name = Column(String(255))
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(50), default='user') # 'user' or 'admin'
+    role = Column(String(50), default='user') # 'superadmin', 'admin', 'user'
     is_active = Column(Boolean, default=True)
+    preferences = Column(JSONB, default=lambda: {})
+    
+    # Intelligence & Style Settings
+    brand_voice = Column(Text) # Raw samples provided by user
+    custom_instructions = Column(Text) # Explicit user preferences
+    writing_style_guide = Column(Text) # AI analyzed communication style rules
+    last_style_sync = Column(DateTime) # Last time background sync ran
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime)
     
@@ -221,6 +234,7 @@ class AssistantConversation(Base):
     
     id = Column(Integer, primary_key=True)
     title = Column(String(255), default='New Conversation')
+    mode = Column(String(20), default='enterprise') # 'enterprise' or 'general'
     created_at = Column(DateTime, default=datetime.utcnow)
     last_message_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -1,29 +1,34 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
+# Environments
+.env
+.env.example
 .venv/
 env/
-.env
-*.json_oauth_token.json
-.outlook_oauth_token.json
-.gmail_oauth_token.json
-oauth_token.json
+venv/
+ENV/
+"RFQ agent/"
+RFQ_agent/
 
 # Database
 *.db
 *.sqlite3
 
-# RFQ Agent Storage (PRIVATE tender documents)
+# Tokens & Secrets
+.gmail_oauth_token.json
+.outlook_oauth_token.json
+token.json
+credentials.json
+
+# Storage & Temporary
 storage/
 temp/
-extracted_docs/
+tmp/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
 # IDEs
 .vscode/
 .idea/
-
-# OS
-.DS_Store
-Thumbs.db

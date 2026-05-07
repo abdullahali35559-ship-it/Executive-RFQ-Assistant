@@ -2,16 +2,31 @@
 
 const API_BASE = window.location.origin;
 
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[Drafts] Loading draft emails...');
-    await loadDrafts();
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Drafts] Script loaded, checking API availability...');
+    if (window.RFQAgentAPIReady) {
+        initDrafts();
+    } else {
+        window.addEventListener('RFQAgentAPIReady', initDrafts);
+    }
 });
+
+async function initDrafts() {
+    console.log('[Drafts] API Ready. Loading draft emails...');
+    await loadDrafts();
+}
+
 
 async function loadDrafts() {
     try {
+        if (!window.RFQAgentAPI || !window.RFQAgentAPI.getDrafts) {
+            console.warn('[Drafts] API instance missing. Retrying in 100ms...');
+            setTimeout(loadDrafts, 100);
+            return;
+        }
         const response = await window.RFQAgentAPI.getDrafts();
-        if (response.success && response.drafts && response.drafts.length > 0) {
-            displayDrafts(response.drafts);
+        if (response.success && response.data && response.data.length > 0) {
+            displayDrafts(response.data);
         } else {
             console.log('No drafts found');
         }
@@ -33,7 +48,11 @@ function displayDrafts(drafts) {
                 </div>
             </div>
             
-<div 
+            ${draft.meta_data && draft.meta_data.multi_agent_analysis ? `
+                <!-- Executive Insights hidden per user request -->
+            ` : ''}
+
+            <div 
                 class="draft-subject" 
                 contenteditable="true" 
                 data-field="subject"
@@ -253,7 +272,7 @@ async function enhanceDraft(draftId) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('rfq_agent_token')}`
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
             },
             body: JSON.stringify({ instructions })
         });

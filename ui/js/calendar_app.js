@@ -1,8 +1,22 @@
 let calendar;
 let currentEventDetails = null;
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Calendar] Script loaded, checking API availability...');
+    if (window.RFQAgentAPIReady) {
+        initCalendar();
+    } else {
+        window.addEventListener('RFQAgentAPIReady', initCalendar);
+    }
+});
+
+async function initCalendar() {
+    console.log('[Calendar] API Ready. Initializing FullCalendar...');
     const calendarEl = document.getElementById('calendar');
+    if (!calendarEl) {
+        console.log('[Calendar] No #calendar element found, skipping FullCalendar initialization.');
+        return;
+    }
 
     // Initialize FullCalendar
     calendar = new FullCalendar.Calendar(calendarEl, {
@@ -43,8 +57,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                             title: ev.title || 'No Title',
                             start: ev.start,
                             end: ev.end,
-                            backgroundColor: ev.color || '#primary-orange',
-                            borderColor: ev.color || '#primary-orange',
+                            backgroundColor: ev.color || 'var(--primary-orange)',
+                            borderColor: ev.color || 'var(--primary-orange)',
                             extendedProps: {
                                 source: ev.source || 'unknown',
                                 location: ev.location,
@@ -80,7 +94,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (urlParams.get('title')) document.getElementById('bookingTitle').value = decodeURIComponent(urlParams.get('title'));
         }, 500);
     }
-});
+
+    // Initialize Flatpickr for booking modal
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr('#bookingDate', {
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            defaultDate: "today"
+        });
+        flatpickr('#bookingStartTime', {
+            enableTime: true,
+            noCalendar: true,
+            dateFormat: "H:i",
+            defaultDate: "09:00"
+        });
+    }
+}
 
 function renderUpcomingSidebar(events) {
     const container = document.getElementById('upcoming-list');
@@ -129,7 +158,7 @@ function renderUpcomingSidebar(events) {
                     <line x1="16" y1="2" x2="16" y2="6"></line>
                     <line x1="8" y1="2" x2="8" y2="6"></line>
                     <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
+                    </svg>
                 ${dateStr}
             </div>
             <div class="appointment-info">
@@ -239,7 +268,7 @@ function copyCurrentMeetingLink() {
             }, 2000);
         }).catch(err => {
             console.error('Failed to copy link:', err);
-            alert('Failed to copy link.');
+            showToast('Failed to copy link.', 'error');
         });
     }
 }
@@ -271,17 +300,13 @@ async function deleteCurrentEvent() {
         if (response.success) {
             closeEventModal();
             calendar.refetchEvents();
-            loadUpcomingAppointments();
-            // Also notify dashboard if needed
-            if (window.opener) {
-                window.opener.location.reload();
-            }
+            showToast('Meeting deleted.', 'success');
         } else {
-            alert('Error deleting event: ' + response.error);
+            showToast('Error deleting event: ' + response.error, 'error');
         }
     } catch (err) {
         console.error('Delete error:', err);
-        alert('Failed to delete meeting. Please try again.');
+        showToast('Failed to delete meeting. Please try again.', 'error');
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -298,20 +323,29 @@ function openBookingModal() {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('bookingDate').value = today;
     }
-    document.getElementById('bookingModal').classList.add('active');
+    const modal = document.getElementById('bookingModal');
+    if (modal) {
+        modal.classList.add('active');
+        modal.style.display = 'flex';
+    }
 }
 
 function closeBookingModal() {
-    document.getElementById('bookingModal').classList.remove('active');
+    const modal = document.getElementById('bookingModal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }
 }
 
 async function handleBookingSubmit(event) {
     event.preventDefault();
-    const btn = event.target.querySelector('button[type="submit"]');
-    const originalText = btn.innerText;
+    const btn = document.getElementById('btnConfirmBooking') || event.target.querySelector('button[type="submit"]');
+    if (!btn) return;
+    const originalText = btn.textContent;
 
     try {
-        btn.innerText = 'Creating...';
+        btn.textContent = 'Creating...';
         btn.disabled = true;
 
         const date = document.getElementById('bookingDate').value;
@@ -328,22 +362,23 @@ async function handleBookingSubmit(event) {
             start_time: start.toISOString().replace('.000Z', 'Z'),
             end_time: end.toISOString().replace('.000Z', 'Z'),
             description: document.getElementById('bookingDescription').value,
-            attendees: document.getElementById('bookingAttendees').value.split(',').map(e => e.trim()).filter(e => e)
+            attendees: document.getElementById('bookingAttendees').value.split(',').map(e => e.trim()).filter(e => e),
+            notify_guests: document.getElementById('bookingNotifyGuests').checked
         };
 
         const response = await window.RFQAgentAPI.createCalendarEvent(payload);
         if (response.success) {
-            alert('Meeting booked successfully!');
+            showToast('Meeting confirmed! The client has been notified.', 'success');
             closeBookingModal();
-            location.reload(); // Refresh to show new event
+            setTimeout(() => location.reload(), 1500);
         } else {
-            alert('Error: ' + response.error);
+            showToast('Error: ' + response.error, 'error');
         }
     } catch (error) {
         console.error('Booking error:', error);
-        alert('Failed to book meeting: ' + error.message);
+        showToast('Failed to book meeting: ' + error.message, 'error');
     } finally {
-        btn.innerText = originalText;
+        btn.textContent = originalText;
         btn.disabled = false;
     }
 }

@@ -9,12 +9,16 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- FullCalendar CDN -->
+    <!-- FullCalendar v6 (Styles auto-injected by JS) -->
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
 
     <!-- Stylesheets -->
     <link rel="stylesheet" href="css/variables.css">
     <link rel="stylesheet" href="css/components.css">
+
+    <!-- Flatpickr (Professional Date Picker) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
     <style>
         .layout {
@@ -175,6 +179,65 @@
             height: 12px;
             border-radius: 50%;
         }
+
+        /* Mobile responsiveness adjustments */
+        @media (max-width: 768px) {
+            .app-container {
+                padding: 10px;
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100% !important;
+                position: relative;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+
+            .main-content {
+                width: 100%;
+            }
+
+            .calendar-container {
+                padding: 10px;
+            }
+
+            .calendar-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+        /* Professional Icon Sizing Fix (Fail-safe) */
+        .fc-icon {
+            width: 1.2em !important;
+            height: 1.2em !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 1em !important;
+        }
+        
+        .fc-button .fc-icon {
+            vertical-align: middle;
+        }
+
+        .fc-button-group {
+            display: flex !important;
+            gap: 4px;
+        }
+        
+        .fc .fc-button {
+            padding: 6px 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+        }
+
+        .fc-toolbar {
+            flex-wrap: wrap;
+            gap: 10px;
+        }
     </style>
 </head>
 
@@ -201,8 +264,7 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
-                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
-                    class="btn btn-secondary btn-sm"
+                <button onclick="Auth.logout()" class="btn btn-secondary btn-sm"
                     style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
                     Sign Out
                 </button>
@@ -365,73 +427,84 @@
                 <span class="modal-close" onclick="closeEventModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="email-meta">
-                    <div class="email-meta-item">
-                        <span class="email-meta-label">Time</span>
-                        <span id="modalEventTime"></span>
+                <div class="email-meta"
+                    style="background: rgba(0,0,0,0.03); border-radius: 12px; padding: 20px; margin-bottom: 25px; border: 1px solid rgba(0,0,0,0.05);">
+                    <div class="email-meta-item" style="margin-bottom: 12px;">
+                        <span class="email-meta-label"
+                            style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Time</span>
+                        <div id="modalEventTime"
+                            style="font-weight: 600; color: var(--text-primary); font-size: 1.1rem; margin-top: 4px;">
+                        </div>
                     </div>
                     <div class="email-meta-item" id="locationRow">
-                        <span class="email-meta-label">Location</span>
-                        <span id="modalEventLocation"></span>
+                        <span class="email-meta-label"
+                            style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Location</span>
+                        <div id="modalEventLocation"
+                            style="font-weight: 500; color: var(--text-secondary); margin-top: 4px;"></div>
                     </div>
                 </div>
 
-                <div id="attendeesSection" style="margin-bottom: 20px;">
+                <div id="attendeesSection" style="margin-bottom: 25px;">
                     <h3
-                        style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
+                        style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.05em;">
                         Participants</h3>
-                    <div id="modalEventAttendees" style="display: flex; flex-wrap: wrap; gap: 8px;">
-                        <!-- Populated via JS -->
-                    </div>
+                    <div id="modalEventAttendees" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
                 </div>
 
-                <div id="descriptionSection">
+                <div id="descriptionSection" style="margin-bottom: 25px; display: none;">
                     <h3
-                        style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
-                        Description</h3>
+                        style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.05em;">
+                        Meeting Notes</h3>
                     <div id="modalEventDescription"
-                        style="font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap;">
-                        <!-- Populated via JS -->
+                        style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border-light);">
                     </div>
                 </div>
             </div>
-            <div class="modal-footer" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
-                <button id="deleteEventBtn" class="btn"
-                    style="background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid #EF4444; margin-right: auto;"
-                    onclick="deleteCurrentEvent()">Delete Event</button>
-                <button id="modalCopyLink" class="btn"
-                    style="display: none; background: rgba(255, 92, 53, 0.1); color: var(--primary-orange); border: 1px solid var(--primary-orange); align-items: center; gap: 6px;"
-                    onclick="copyCurrentMeetingLink()">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    Copy Link
-                </button>
-                <a id="modalEventLink" href="#" target="_blank" class="btn btn-primary" style="display: none;">Join
-                    Meeting</a>
-                <button class="btn btn-secondary" onclick="closeEventModal()">Close</button>
+            <div class="modal-footer"
+                style="padding: 20px 30px; background: #fafafa; border-top: 1px solid #eee; gap: 12px;">
+                <button id="deleteEventBtn" class="btn btn-secondary" onclick="deleteCurrentEvent()"
+                    style="color: #ef4444; border-color: #fecaca; background: #fef2f2; margin-right: auto;">Delete
+                    Meeting</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="modalCopyLink" class="btn btn-secondary" onclick="copyCurrentMeetingLink()"
+                        style="display: none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" style="margin-right:6px;">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        Copy Link
+                    </button>
+                    <a id="modalEventLink" href="#" target="_blank" class="btn btn-primary"
+                        style="display: none; background: #FF5C35;">
+                        Join Meeting
+                    </a>
+                    <button class="btn btn-secondary" onclick="closeEventModal()">Close</button>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Booking Modal -->
     <div id="bookingModal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2 style="display:flex;align-items:center;gap:10px;">
-                    <svg width="24" height="24" fill="none" stroke="var(--primary-orange)" stroke-width="2"
-                        viewBox="0 0 24 24">
+        <div class="modal-content"
+            style="max-width: 550px; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); backdrop-filter: blur(20px);">
+            <div class="modal-header"
+                style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); padding: 25px 30px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <h2 style="color: white; margin: 0; display: flex; align-items: center; gap: 12px; font-size: 1.5rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)"
+                        stroke-width="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                         <line x1="16" y1="2" x2="16" y2="6" />
                         <line x1="8" y1="2" x2="8" y2="6" />
                         <line x1="3" y1="10" x2="21" y2="10" />
                     </svg>
-                    Schedule New Meeting
+                    Executive Scheduling
                 </h2>
-                <span class="modal-close" onclick="closeBookingModal()">&times;</span>
+                <span class="modal-close" onclick="closeBookingModal()"
+                    style="color: rgba(255,255,255,0.6);">&times;</span>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="padding: 30px 30px 40px; background: rgba(255,255,255,0.02);">
                 <form id="bookingForm" onsubmit="handleBookingSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">Calendar Provider</label>
@@ -470,22 +543,61 @@
                             placeholder="comma separated emails">
                         <p class="form-help">Separate multiple emails with commas.</p>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Agenda / Description</label>
-                        <textarea id="bookingDescription" class="form-textarea"
-                            placeholder="What is this meeting about?"></textarea>
+                    <textarea id="bookingDescription" class="form-textarea"
+                        placeholder="What is this meeting about?"></textarea>
+
+                    <div class="form-group" style="margin: 25px 0 15px;">
+                        <label class="form-label"
+                            style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="bookingNotifyGuests" checked
+                                style="width: 18px; height: 18px; accent-color: var(--primary-orange);">
+                            <span>Send professional email notification to guests</span>
+                        </label>
                     </div>
-                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 20px;">
-                        <button type="submit" class="btn btn-primary" style="width: 100%;">Create Meeting</button>
+                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 30px;">
+                        <button type="submit" id="btnConfirmBooking" class="btn btn-primary"
+                            style="width: 100%; padding: 16px; font-weight: 700; font-size: 1.1rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 92, 53, 0.3);">Create
+                            Meeting</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/calendar_app.js"></script>
+    <script src="js/auth.js?v=2.4"></script>
+    <script src="js/api.js?v=2.4"></script>
+    <script src="js/calendar_app.js?v=2.4"></script>
+    <script>
+        function showToast(message, type = 'info') {
+            let container = document.querySelector('.toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            let icon = '';
+            if (type === 'success') icon = '<svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            else if (type === 'error') icon = '<svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+            else icon = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+
+            toast.innerHTML = `
+                ${icon}
+                <div class="toast-message">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'toastFadeOut 0.4s ease-in forwards';
+                setTimeout(() => toast.remove(), 400);
+            }, 6000);
+        }
+    </script>
 </body>
 
 </html>

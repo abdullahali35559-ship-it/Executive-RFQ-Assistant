@@ -97,7 +97,7 @@ class GmailAPIFetcher:
         """
         try:
             # Ultra-Strict query for Primary Inbox Only (exclude categories)
-            query = 'label:unread label:INBOX -category:promotions -category:social -category:updates -category:forums'
+            query = 'label:unread label:INBOX -category:promotions -category:social'
             print(f"DEBUG: Searching Gmail with query: '{query}'")
             
             # Search emails
@@ -193,8 +193,15 @@ class GmailAPIFetcher:
             from email.utils import parseaddr
             _, sender_email = parseaddr(from_addr)
             
+            # Extract Threading Headers (RFC 822)
+            message_id_header = headers.get('Message-ID', '')
+            in_reply_to_header = headers.get('In-Reply-To', '')
+            
             return {
                 'email_id': message_id,
+                'message_id': message_id_header,
+                'in_reply_to': in_reply_to_header,
+                'conversation_id': message.get('threadId'), # Gmail Thread ID
                 'subject': subject,
                 'sender': sender_email,
                 'sender_name': from_addr,
@@ -290,24 +297,37 @@ class GmailAPIFetcher:
             return False
     
     def _extract_body(self, payload: Dict) -> str:
-        """Extract email body from payload"""
+        """Extract email body from payload recursively"""
         body = ""
         
-        if 'parts' in payload:
-            for part in payload['parts']:
-                if part['mimeType'] == 'text/plain':
-                    data = part['body'].get('data', '')
-                    if data:
-                        body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-                        break
-                elif part['mimeType'] == 'text/html' and not body:
-                    data = part['body'].get('data', '')
-                    if data:
-                        body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-        else:
-            data = payload['body'].get('data', '')
-            if data:
+        # If this is a part, try to get data
+        if 'body' in payload and payload['body'].get('data'):
+            data = payload['body']['data']
+            try:
                 body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+            except:
+                pass
+
+        # If we have parts, recurse and prioritize text/plain or text/html
+        if 'parts' in payload:
+            parts = payload['parts']
+            
+            # First pass: try to find text/plain
+            for part in parts:
+                if part.get('mimeType') == 'text/plain':
+                    part_body = self._extract_body(part)
+                    if part_body: return part_body
+            
+            # Second pass: try to find text/html if no plain text
+            for part in parts:
+                if part.get('mimeType') == 'text/html':
+                    part_body = self._extract_body(part)
+                    if part_body: return part_body
+                    
+            # Third pass: just recurse into everything else
+            for part in parts:
+                part_body = self._extract_body(part)
+                if part_body: return part_body
         
         return body
 
@@ -529,6 +549,81 @@ class GmailAPIFetcher:
             print(f"[X] Error deleting Gmail draft: {e}")
             return {'success': False, 'error': str(e)}
     
+    # ==========================================
+    # CALENDAR METHODS (Google Calendar API)
+    # ==========================================
+    
+    def fetch_calendar_events(self, days: int = 7) -> List[Dict]:
+        """Fetch calendar events for the next X days"""
+        try:
+            from datetime import timedelta
+            # We need the calendar service
+            cal_service = build('calendar', 'v3', credentials=self.credentials)
+            
+            now = datetime.utcnow().isoformat() + 'Z'
+            max_time = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+            
+            events_result = cal_service.events().list(
+                calendarId='primary',
+                timeMin=now,
+                timeMax=max_time,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            formatted_events = []
+            
+            for ev in events:
+                start = ev['start'].get('dateTime', ev['start'].get('date'))
+                end = ev['end'].get('dateTime', ev['end'].get('date'))
+                
+                formatted_events.append({
+                    'id': ev['id'],
+                    'title': ev.get('summary', 'No Title'),
+                    'start': start,
+                    'end': end,
+                    'source': 'google',
+                    'location': ev.get('location', ''),
+                    'link': ev.get('htmlLink', ''),
+                    'description': ev.get('description', ''),
+                    'attendees': [a.get('email', '') for a in ev.get('attendees', [])]
+                })
+            
+            return formatted_events
+        except Exception as e:
+            print(f"[X] Error fetching Google Calendar events: {e}")
+            return []
+
+    def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "") -> Dict:
+        """Create a new calendar event in Google Calendar"""
+        try:
+            cal_service = build('calendar', 'v3', credentials=self.credentials)
+            
+            event = {
+                'summary': title,
+                'location': 'RFI Managed Meeting',
+                'description': description,
+                'start': {
+                    'dateTime': start_iso,
+                    'timeZone': 'UTC',
+                },
+                'end': {
+                    'dateTime': end_iso,
+                    'timeZone': 'UTC',
+                },
+                'attendees': [{'email': email} for email in (attendees or [])],
+                'reminders': {
+                    'useDefault': True
+                },
+            }
+            
+            event = cal_service.events().insert(calendarId='primary', body=event).execute()
+            return {'success': True, 'event': event}
+        except Exception as e:
+            print(f"[X] Error creating Google event: {e}")
+            return {'success': False, 'error': str(e)}
+
     def disconnect(self):
         """Cleanup (no persistent connection for API)"""
         print("[OK] Disconnected from Gmail API")

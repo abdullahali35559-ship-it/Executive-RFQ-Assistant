@@ -39,7 +39,7 @@ class DocumentVersioner:
             
             # Query for all versions of this document
             documents = session.query(Document).filter(
-                Document.tender_id == tender_id,
+                Document.thread_id == tender_id,
                 Document.original_filename.like(f"{base_filename}%")
             ).order_by(Document.version.desc()).all()
             
@@ -98,7 +98,7 @@ class DocumentVersioner:
         
         try:
             document = session.query(Document).filter(
-                Document.tender_id == tender_id,
+                Document.thread_id == tender_id,
                 Document.file_hash == file_hash
             ).first()
             
@@ -173,7 +173,7 @@ class DocumentVersioner:
             base_filename = self._get_base_filename(filename)
             
             documents = session.query(Document).filter(
-                Document.tender_id == tender_id,
+                Document.thread_id == tender_id,
                 Document.original_filename.like(f"{base_filename}%")
             ).order_by(Document.version.asc()).all()
             

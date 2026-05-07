@@ -1,30 +1,48 @@
-const TOKEN_KEY = 'rfq_agent_token';
+/**
+ * ELITE SECURITY CONFIGURATION
+ * ----------------------------
+ * This module strictly relies on HttpOnly cookies.
+ * Tokens are NOT stored in JS-accessible memory to prevent XSS theft.
+ */
 
 const Auth = {
-    setToken(token) {
-        localStorage.setItem(TOKEN_KEY, token);
-    },
-    getToken() {
-        return localStorage.getItem(TOKEN_KEY);
-    },
-    logout() {
-        localStorage.removeItem(TOKEN_KEY);
-        window.location.href = 'login.html';
-    },
-    isAuthenticated() {
-        const token = this.getToken();
-        if (!token) return false;
+    // Session state
+    user: null,
+
+    async checkSession() {
         try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            return payload.exp > Date.now() / 1000;
-        } catch (e) { return false; }
-    },
-    checkAuth() {
-        if (!this.isAuthenticated() && !window.location.pathname.includes('login.html')) {
-            window.location.href = 'login.html';
+            const resp = await fetch('/api/auth/me');
+            if (resp.ok) {
+                this.user = await resp.json();
+                localStorage.setItem('rfi_user_session', 'active');
+                return this.user;
+            }
+        } catch (e) {
+            console.warn("Session check failed (might be logged out)");
         }
+        this.user = null;
+        localStorage.removeItem('rfi_user_session');
+        return null;
+    },
+
+    async logout() {
+        console.log("Professional Logout Initialized...");
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+            console.error("Server logout failed", e);
+        }
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.href = '/?logged_out=true';
+    },
+
+    // Legacy support for UI components that check sync
+    isAuthenticatedSync() {
+        return localStorage.getItem('rfi_user_session') === 'active';
     }
 };
 
-Auth.checkAuth();
+// Attach to window immediately
 window.Auth = Auth;
+console.log('[Auth] Executive Security Module Loaded');

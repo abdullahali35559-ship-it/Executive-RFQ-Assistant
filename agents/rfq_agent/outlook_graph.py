@@ -139,7 +139,7 @@ class OutlookGraphFetcher:
             url = f'{self.base_url}/me/messages'
             params = {
                 '$filter': filter_query,
-                '$select': 'id,subject,from,receivedDateTime,bodyPreview,body,hasAttachments',
+                '$select': 'id,subject,from,receivedDateTime,bodyPreview,body,hasAttachments,internetMessageId,conversationId',
                 '$orderby': 'receivedDateTime desc',
                 '$top': limit
             }
@@ -217,6 +217,8 @@ class OutlookGraphFetcher:
             
             email_data = {
                 'email_id': graph_message['id'],
+                'message_id': graph_message.get('internetMessageId'), # RFC 822 Message-ID
+                'conversation_id': graph_message.get('conversationId'), # Outlook Thread ID
                 'subject': graph_message.get('subject', '(No Subject)'),
                 'sender': f"{sender_name} <{sender_email}>",
                 'body': body_content,
@@ -653,6 +655,95 @@ class OutlookGraphFetcher:
             print(f"[X] Error getting drafts: {e}")
             return []
     
+    # ==========================================
+    # CALENDAR METHODS (Microsoft Graph)
+    # ==========================================
+    
+    def fetch_calendar_events(self, days: int = 7) -> List[Dict]:
+        """Fetch calendar events for the next X days"""
+        try:
+            from datetime import timedelta
+            start_date = datetime.utcnow()
+            end_date = start_date + timedelta(days=days)
+            
+            start_iso = start_date.isoformat() + 'Z'
+            end_iso = end_date.isoformat() + 'Z'
+            
+            # Graph API Calendar View
+            url = f'{self.base_url}/me/calendar/calendarView'
+            params = {
+                'startDateTime': start_iso,
+                'endDateTime': end_iso,
+                '$select': 'id,subject,start,end,location,bodyPreview,webLink,attendees',
+                '$orderby': 'start/dateTime asc'
+            }
+            
+            response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
+            if response.status_code != 200:
+                print(f"Warning: Outlook Calendar API error: {response.status_code}")
+                return []
+            
+            data = response.json()
+            events = data.get('value', [])
+            
+            formatted_events = []
+            for ev in events:
+                formatted_events.append({
+                    'id': ev['id'],
+                    'title': ev.get('subject', 'No Title'),
+                    'start': ev['start']['dateTime'],
+                    'end': ev['end']['dateTime'],
+                    'source': 'outlook',
+                    'location': ev.get('location', {}).get('displayName', ''),
+                    'link': ev.get('webLink', ''),
+                    'description': ev.get('bodyPreview', ''),
+                    'attendees': [a.get('emailAddress', {}).get('address', '') for a in ev.get('attendees', [])]
+                })
+            
+            return formatted_events
+        except Exception as e:
+            print(f"[X] Error fetching Outlook events: {e}")
+            return []
+
+    def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "") -> Dict:
+        """Create a new calendar event in Outlook"""
+        try:
+            url = f'{self.base_url}/me/events'
+            
+            event_payload = {
+                "subject": title,
+                "body": {
+                    "contentType": "HTML",
+                    "content": description
+                },
+                "start": {
+                    "dateTime": start_iso,
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": end_iso,
+                    "timeZone": "UTC"
+                },
+                "location": {
+                    "displayName": "RFI Managed Meeting"
+                },
+                "attendees": [
+                    {
+                        "emailAddress": {"address": email},
+                        "type": "required"
+                    } for email in (attendees or [])
+                ]
+            }
+            
+            response = requests.post(url, headers=self._get_headers(), json=event_payload, timeout=30)
+            if response.status_code in [200, 201]:
+                return {'success': True, 'event': response.json()}
+            else:
+                raise Exception(f"Outlook API error: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"[X] Error creating Outlook event: {e}")
+            return {'success': False, 'error': str(e)}
+
     def disconnect(self):
         """Cleanup (no persistent connection for REST API)"""
         print("[OK] Disconnected from Outlook Graph API")

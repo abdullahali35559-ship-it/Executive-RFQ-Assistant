@@ -1,7 +1,7 @@
 // RFQ Agent - API Client
 // Handles all communication with FastAPI backend
 
-const API_BASE_URL = window.location.origin;  // FastAPI server
+const API_BASE_URL = window.location.port ? window.location.origin : `${window.location.origin}:8069`;
 
 class RFQAgentAPI {
     constructor() {
@@ -14,7 +14,6 @@ class RFQAgentAPI {
             const response = await fetch(`${this.baseURL}${endpoint}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': localStorage.getItem('rfq_agent_token') ? `Bearer ${localStorage.getItem('rfq_agent_token')}` : '',
                     ...options.headers
                 },
                 ...options
@@ -216,8 +215,8 @@ class RFQAgentAPI {
     }
 
     // RFI Assistant
-    async getConversations() {
-        return await this.request('/api/assistant/conversations');
+    async getConversations(mode = 'enterprise') {
+        return await this.request(`/api/assistant/conversations?mode=${mode}`);
     }
 
     async createConversation(title = "New Conversation") {
@@ -240,13 +239,14 @@ class RFQAgentAPI {
         return await this.request(endpoint);
     }
 
-    async askAssistant(message, context = null, conversationId = null) {
+    async askAssistant(message, context = null, conversationId = null, mode = 'enterprise') {
         return await this.request('/api/assistant/chat', {
             method: 'POST',
             body: JSON.stringify({
-                message,
+                query: message,
                 context,
-                conversation_id: conversationId
+                conversation_id: conversationId,
+                mode
             })
         });
     }
@@ -325,10 +325,24 @@ class RFQAgentAPI {
     async getContactIntelligence(contactId) {
         return await this.request(`/api/contacts/${contactId}/intelligence`);
     }
+
+    async getSessionSummary(fromTime, toTime) {
+        return await this.request(`/api/session-summary?from_time=${encodeURIComponent(fromTime)}&to_time=${encodeURIComponent(toTime)}`);
+    }
 }
 
 // Create singleton instance
+// Create singleton instance
 const api = new RFQAgentAPI();
 
-// Export for use in other files
+// Export for use in other files with multiple aliases for robustness
 window.RFQAgentAPI = api;
+window.api = api; // Short alias
+window.RFQAgentAPIReady = true;
+
+// Trigger custom event so other scripts know API is ready
+window.dispatchEvent(new CustomEvent('RFQAgentAPIReady'));
+
+console.log('[API] Executive Intelligence Client Ready');
+
+

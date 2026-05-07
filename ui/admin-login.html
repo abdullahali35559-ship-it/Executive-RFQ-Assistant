@@ -158,8 +158,8 @@
 
         <form id="login-form">
             <div class="input-group">
-                <label>Admin Email</label>
-                <input type="email" id="email" required placeholder="admin@rfi.ai">
+                <label>Admin Username / Email</label>
+                <input type="text" id="email" required placeholder="superadmin or admin@rfi.ai">
             </div>
             <div class="input-group">
                 <label>Access Key</label>
@@ -171,7 +171,7 @@
             </button>
         </form>
 
-        <a href="/login.html" class="back-link">← Back to User Portal</a>
+        <a href="/" class="back-link">← Back to User Portal</a>
     </div>
 
     <script>
@@ -199,9 +199,9 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('access_token', data.access_token);
                     localStorage.setItem('role', 'admin');
-                    window.location.href = '/admin';
+                    window.location.href = '/admin_portal';
                 } else {
                     const error = await response.json();
                     errorMsg.textContent = error.detail || 'Access Denied';
@@ -219,8 +219,3 @@
 </body>
 
 </html>
-
-
-
-
-

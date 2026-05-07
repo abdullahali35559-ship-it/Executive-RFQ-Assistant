@@ -1,19 +1,19 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
 from auth.security import decode_access_token
 from config.database import SessionLocal
 from database.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Dependency to get the current authenticated user from JWT via Database."""
-    if not token:
+def get_current_user(request: Request):
+    """ELITE SECURITY: Strictly relies on HttpOnly Cookies. JS-Readable Tokens are DISALLOWED."""
+    token = request.cookies.get("access_token")
+    
+    if not token or token in ["null", "undefined", "None", ""]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Forbidden: No professional session token found",
+            headers={"WWW-Authenticate": "Cookie"},
         )
         
     credentials_exception = HTTPException(
@@ -46,19 +46,17 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         db.close()
 
 def get_current_admin(current_user: User = Depends(get_current_user)):
-    """Dependency to enforce admin role."""
-    if current_user.role != "admin":
+    """Dependency to enforce admin/superadmin role."""
+    if current_user.role not in ["admin", "superadmin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user does not have enough privileges"
         )
     return current_user
 
-def get_optional_current_user(token: Optional[str] = Depends(oauth2_scheme)):
-    """Optional version of the current user dependency."""
-    if not token:
-        return None
+def get_optional_current_user(request: Request):
+    """Optional version of the current user dependency (Cookie Based)."""
     try:
-        return get_current_user(token)
+        return get_current_user(request)
     except HTTPException:
         return None

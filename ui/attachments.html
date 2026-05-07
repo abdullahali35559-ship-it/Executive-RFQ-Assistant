@@ -200,6 +200,103 @@
             overflow: visible;
         }
 
+        /* Professional Email Preview Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 0;
+            border-radius: var(--radius-xl);
+            width: 80%;
+            max-width: 900px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            animation: modalSlideUp 0.3s ease-out;
+        }
+
+        @keyframes modalSlideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: var(--space-6) var(--space-8);
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: #fcfcfc;
+        }
+
+        .modal-body {
+            padding: var(--space-8);
+            overflow-y: auto;
+            flex: 1;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+            background: white;
+        }
+
+        .modal-footer {
+            padding: var(--space-4) var(--space-8);
+            border-top: 1px solid var(--border-light);
+            background: #f8fafc;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .email-meta-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .email-subject-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .email-sender-line {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .close-modal {
+            color: var(--text-muted);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: var(--primary-orange);
+        }
+
         td:nth-child(1) {
             white-space: normal;
             word-break: break-all;
@@ -293,7 +390,10 @@
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="index.html" class="nav-brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><span>RFI</span></a>
+            <a href="index.html" class="nav-brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="var(--primary-orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg><span>RFI</span></a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link">Dashboard</a></li>
@@ -307,8 +407,7 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
-                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
-                    class="btn btn-secondary btn-sm"
+                <button onclick="Auth.logout()" class="btn btn-secondary btn-sm"
                     style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
                     Sign Out
                 </button>
@@ -397,7 +496,11 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="assistant.html" class="sidebar-link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>RFI Assistant</a>
+                    <a href="assistant.html" class="sidebar-link"><svg width="18" height="18" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>RFI Assistant</a>
                 </li>
                 <li class="sidebar-item">
                     <a href="settings.html" class="sidebar-link">
@@ -464,15 +567,40 @@
                 </button>
             </div>
 
+            <!-- Email Preview Modal (Professional Redesign) -->
+    <div id="emailPreviewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="email-meta-info">
+                    <h2 class="email-subject-title" id="modalEmailSubject">Tender Subject</h2>
+                    <div class="email-sender-line">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span id="modalEmailSender">sender@example.com</span>
+                    </div>
+                </div>
+                <span class="close-modal" onclick="closeEmailPreview()">&times;</span>
+            </div>
+            <div class="modal-body" id="modalEmailBody">
+                Loading email content...
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="closeEmailPreview()">Close Preview</button>
+            </div>
+        </div>
+    </div>
+
             <!-- Documents Table -->
-            <div class="table-container">
+            <div id="documentsTable" class="table-container">
                 <table>
                     <thead>
                         <tr>
                             <th>Attachment Name</th>
-                            <th>Type</th>
-                            <th>Status/Tags</th>
-                            <th>Thread ID</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Version</th>
                             <th>Size</th>
                             <th>Received Date</th>
                             <th>Actions</th>
@@ -500,8 +628,8 @@
     </div>
 
     <!-- JavaScript -->
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
+    <script src="js/auth.js?v=2.4"></script>
+    <script src="js/api.js?v=2.4"></script>
     <script>
         function showToast(message, type = 'info') {
             let container = document.querySelector('.toast-container');
@@ -535,7 +663,15 @@
 
         let allDocs = [];
 
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.RFQAgentAPIReady) {
+                initAttachments();
+            } else {
+                window.addEventListener('RFQAgentAPIReady', initAttachments);
+            }
+        });
+
+        async function initAttachments() {
             console.log('Attachments page loaded, fetching data...');
             await loadDocuments();
 
@@ -545,15 +681,20 @@
             if (threadId) {
                 console.log(`Setting thread filter to: ${threadId}`);
                 const tenderFilter = document.getElementById('tenderFilter');
-                tenderFilter.value = threadId;
-                applyFilters();
+                if (tenderFilter) {
+                    tenderFilter.value = threadId;
+                    applyFilters();
+                }
             }
 
             // Set up listeners
-            document.getElementById('searchInput').addEventListener('keyup', applyFilters);
-            document.getElementById('typeFilter').addEventListener('change', applyFilters);
-            document.getElementById('tenderFilter').addEventListener('change', applyFilters);
-        });
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) searchInput.addEventListener('keyup', applyFilters);
+            const typeFilter = document.getElementById('typeFilter');
+            if (typeFilter) typeFilter.addEventListener('change', applyFilters);
+            const tenderFilter = document.getElementById('tenderFilter');
+            if (tenderFilter) tenderFilter.addEventListener('change', applyFilters);
+        }
 
         async function loadDocuments() {
             try {
@@ -637,7 +778,6 @@
             };
             input.click();
         }
-
         function displayDocuments(docs) {
             const tbody = document.getElementById('documentsTableBody');
 
@@ -652,22 +792,32 @@
                 return;
             }
 
-            // Group documents by thread_id to keep projects separate
+            // Group documents by email_id to keep separate emails distinct
             const groups = docs.reduce((acc, doc) => {
-                const groupKey = doc.thread_id || doc.sender_email || 'Unknown';
+                // Group by Tender ID (thread_id) instead of individual email
+                const groupKey = doc.thread_id; 
+                
                 if (!acc[groupKey]) {
                     acc[groupKey] = {
                         docs: [],
-                        latestDate: new Date(0)
+                        latestDate: new Date(0),
+                        sender_email: doc.sender_email || 'N/A',
+                        sender_name: doc.sender_name || 'Unknown',
+                        email_subject: doc.email_subject || 'Direct Upload',
+                        email_body: doc.email_body,
+                        thread_id: doc.thread_id
                     };
                 }
                 acc[groupKey].docs.push(doc);
 
-                // Defensive date parsing
                 try {
-                    const docDate = doc.received_at ? new Date(doc.received_at) : new Date(0);
+                    const docDate = doc.uploaded_at ? new Date(doc.uploaded_at) : new Date(0);
                     if (!isNaN(docDate.getTime()) && docDate > acc[groupKey].latestDate) {
                         acc[groupKey].latestDate = docDate;
+                        // Keep the latest email subject for the header
+                        if (doc.email_subject && doc.email_subject !== 'Direct Upload') {
+                            acc[groupKey].email_subject = doc.email_subject;
+                        }
                     }
                 } catch (e) {
                     console.warn('Error parsing date for doc:', doc.id, e);
@@ -675,38 +825,68 @@
                 return acc;
             }, {});
 
-            // Sort groups by latest attachment date (Newest First)
             const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
                 return groups[b].latestDate - groups[a].latestDate;
             });
 
+            const MANDATORY_CATEGORIES = {
+                '01_Instructions': 'Instructions',
+                '02_Scope_of_Work': 'Scope of Work',
+                '03_Drawings': 'Drawings',
+                '04_Specifications': 'Specs',
+                '05_BOQ': 'BOQ',
+                '07_Commercial': 'Commercial'
+            };
+
             let html = '';
             sortedGroupKeys.forEach(groupKey => {
-                const groupDocs = groups[groupKey].docs;
-                const firstDoc = groupDocs[0];
-                const senderDisplay = firstDoc.sender_name && firstDoc.sender_name !== 'Unknown'
-                    ? `${firstDoc.sender_name} (${firstDoc.sender_email})`
-                    : (firstDoc.sender_email || 'System/Unassigned');
+                const group = groups[groupKey];
+                const groupDocs = group.docs;
+                
+                // Calculate missing documents for this SPECIFIC email/thread context
+                const presentCategories = new Set(groupDocs.filter(d => d.is_correct !== false).map(d => (d.category || '').toLowerCase()));
+                const missing = Object.keys(MANDATORY_CATEGORIES).filter(cat => !presentCategories.has(cat.toLowerCase()));
+
+                const missingHtml = missing.length > 0
+                    ? `<div style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">
+                         <span style="font-size: 0.7rem; color: #ef4444; font-weight: 700; text-transform: uppercase;">Missing in this email:</span>
+                         ${missing.map(m => `<span class="missing-badge">${MANDATORY_CATEGORIES[m]}</span>`).join('')}
+                       </div>`
+                    : '<div style="margin-top: 8px;"><span class="badge badge-success" style="font-size: 0.65rem;">COMPLETE EMAIL PACKAGE</span></div>';
 
                 html += `
                     <tr class="tender-group-header">
                         <td colspan="7">
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <div style="display: flex; align-items: center; gap: 15px;">
-                                    <div style="background: var(--bg-dark); color: var(--text-primary); padding: 5px 12px; border-radius: 6px; font-weight: 700; border: 1px solid var(--border-medium); display: flex; align-items: center; gap: 8px;">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                            <circle cx="12" cy="7" r="4"></circle>
-                                        </svg>
-                                        ${senderDisplay}
+                            <div style="display: flex; flex-direction: column;">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div class="tender-title-chip" style="background: var(--primary-orange); color: white;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                <polyline points="22,6 12,13 2,6"></polyline>
+                                            </svg>
+                                            ${group.email_subject}
+                                        </div>
+                                        <div style="color: var(--text-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                                            <span style="font-weight: 600; color: var(--text-primary);">[${group.thread_id}]</span>
+                                            ${group.sender_email}
+                                        </div>
                                     </div>
-                                    <div style="color: var(--text-muted); font-size: 0.85rem; font-weight: 500;">
-                                        Thread: <span style="color: var(--primary-orange);">${firstDoc.thread_id || 'N/A'}</span>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <button class="btn btn-sm" style="background: white; border: 1px solid var(--border-medium); font-size: 0.75rem; padding: 4px 12px; display: flex; align-items: center; gap: 6px;" 
+                                                onclick="showEmailPreview('${groupKey}')">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                            Preview Email
+                                        </button>
+                                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; background: #eee; padding: 2px 8px; border-radius: 4px;">
+                                            ${groupDocs.length} ${groupDocs.length === 1 ? 'File' : 'Files'}
+                                        </span>
                                     </div>
                                 </div>
-                                <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">
-                                    ${groupDocs.length} ${groupDocs.length === 1 ? 'File' : 'Files'}
-                                </span>
+                                ${missingHtml}
                             </div>
                         </td>
                     </tr>
@@ -714,53 +894,48 @@
 
                 groupDocs.forEach(doc => {
                     const isLink = doc.file_path && doc.file_path.startsWith('URL:');
-                    const tagsHtml = (doc.tags || []).map(t => `<span class="badge" style="background: ${t.color}20; color: ${t.color}; border: 1px solid ${t.color}40; margin-right: 4px; font-size: 0.7rem;">${t.name}</span>`).join('');
-                    const receivedDate = doc.received_at ? new Date(doc.received_at).toLocaleDateString() : 'N/A';
+                    const uploadDate = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : 'N/A';
+                    const categoryDisplay = doc.category ? doc.category.replace(/^\d+_/, '').replace(/_/g, ' ') : 'Uncategorized';
+                    const summaryHtml = doc.summary ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; font-style: italic; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${doc.summary}">${doc.summary}</div>` : '';
+                    
+                    const statusBadge = doc.is_correct === false
+                        ? '<span class="badge badge-error">Flagged</span>'
+                        : '<span class="badge badge-success">Verified</span>';
 
                     const iconHtml = isLink
-                        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #8b5cf6;">
-                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                           </svg>`
-                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary-orange);">
-                              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                              <polyline points="13 2 13 9 20 9"></polyline>
-                           </svg>`;
+                        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`
+                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
 
                     html += `
                         <tr class="${isLink ? 'link-row' : ''}">
                             <td style="padding-left: 2.5rem;">
                                 <div style="display: flex; align-items: center; gap: 10px;">
                                     ${iconHtml}
-                                    <span style="font-weight: 600; cursor: pointer; color: ${isLink ? '#8b5cf6' : 'var(--text-primary)'};" 
-                                          onclick="handleFileAction('${doc.id}', '${doc.file_path}')">
-                                        ${doc.name}
-                                    </span>
+                                    <div style="display: flex; flex-direction: column;">
+                                        <a href="javascript:void(0)" 
+                                           onclick="handleFileAction('${doc.id}', '${doc.file_path}')" 
+                                           style="font-weight: 600; color: var(--primary-orange); text-decoration: none;"
+                                           onmouseover="this.style.textDecoration='underline'"
+                                           onmouseout="this.style.textDecoration='none'">
+                                            ${doc.original_filename || doc.filename}
+                                        </a>
+                                        <span style="font-size: 0.65rem; color: var(--text-muted);">${doc.filename}</span>
+                                        ${summaryHtml}
+                                    </div>
                                 </div>
                             </td>
-                            <td><span class="file-type-badge ${isLink ? 'type-link' : 'type-pdf'}">${isLink ? 'LINK' : (doc.type || 'FILE')}</span></td>
-                            <td><div style="display: flex; flex-wrap: wrap; gap: 4px;">${tagsHtml}</div></td>
-                            <td style="font-family: monospace; color: var(--text-muted);">${doc.thread_id || 'N/A'}</td>
-                            <td>${isLink ? '--' : (doc.size || 'N/A')}</td>
-                            <td>${receivedDate}</td>
+                            <td><span class="file-type-badge ${isLink ? 'type-link' : 'type-other'}" style="font-size: 0.65rem;">${categoryDisplay}</span></td>
+                            <td>${statusBadge}</td>
+                            <td><span class="badge badge-info" style="font-size: 0.7rem;">v${doc.version || 1}</span></td>
+                            <td>${isLink ? '--' : formatBytes(doc.file_size_bytes)}</td>
+                            <td>${uploadDate}</td>
                             <td>
                                 <div class="actions">
-                                    <button class="btn-icon" title="${isLink ? 'Open Link' : 'View/Download'}" onclick="handleFileAction('${doc.id}', '${doc.file_path}')">
-                                        ${isLink ?
-                            `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                                <polyline points="15 3 21 3 21 9"></polyline>
-                                                <line x1="10" y1="14" x2="21" y2="3"></line>
-                                             </svg>` :
-                            `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                                <polyline points="7 10 12 15 17 10"></polyline>
-                                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                                             </svg>`
-                        }
+                                    <button class="btn btn-secondary btn-sm" style="padding: 4px 10px; font-size: 0.75rem;" onclick="handleFileAction('${doc.id}', '${doc.file_path}')">
+                                        View
                                     </button>
                                     <button class="btn-icon" title="Delete" onclick="deleteDoc('${doc.id}')">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <polyline points="3 6 5 6 21 6"></polyline>
                                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                         </svg>
@@ -775,26 +950,35 @@
             tbody.innerHTML = html;
         }
 
+        function formatBytes(bytes, decimals = 2) {
+            if (!bytes || bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
         async function previewDoc(id) {
             try {
-                const result = await window.RFQAgentAPI.getAttachment(id);
+                const api = window.RFQAgentAPI || window.api;
+                const result = await api.getAttachment(id);
                 if (result.success && result.data.view_url) {
-                    // Open the file in a new tab
                     const rawUrl = result.data.view_url;
-                    // If it's already an absolute URL, don't prepend baseURL
                     const viewUrl = (rawUrl.startsWith('http'))
                         ? rawUrl
-                        : `${window.RFQAgentAPI.baseURL}${rawUrl}`;
-
-                    console.log('Opening absolute URL:', viewUrl);
+                        : `${api.baseURL}${rawUrl}`;
+                    
+                    console.log('Opening document:', viewUrl);
                     window.open(viewUrl, '_blank');
                 } else {
-                    console.error('Error: Could not determine view URL for this document');
+                    alert('Error: Could not determine view URL for this document');
                 }
             } catch (error) {
                 console.error('Error previewing document:', error);
+                alert('Connection error: Failed to fetch document details.');
             }
         }
+
 
         function handleFileAction(id, path) {
             if (path && path.startsWith('URL:')) {
@@ -808,7 +992,6 @@
         function downloadDoc(id) {
             previewDoc(id); // For simple files, preview is same as download in browser
         }
-
         async function deleteDoc(id) {
             if (confirm('Are you sure you want to delete this attachment? This cannot be undone.')) {
                 try {
@@ -822,12 +1005,67 @@
                 }
             }
         }
+
+        // --- Live Email Preview ---
+        let currentGroups = {}; // Store groups globally to access email_body
+
+        function showEmailPreview(groupKey) {
+            const group = currentGroups[groupKey];
+            if (!group) return;
+
+            document.getElementById('modalEmailSubject').innerText = group.email_subject;
+            document.getElementById('modalEmailSender').innerText = `From: ${group.sender_name} <${group.sender_email}> | Date: ${group.latestDate.toLocaleString()}`;
+            document.getElementById('modalEmailBody').innerText = group.email_body || "No body content available";
+            
+            document.getElementById('emailPreviewModal').style.display = 'flex';
+        }
+
+        function closeEmailPreview() {
+            document.getElementById('emailPreviewModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('emailPreviewModal');
+            if (event.target == modal) {
+                closeEmailPreview();
+            }
+        }
+
+        // Wrap the original displayDocuments to save groups
+        const originalDisplayDocuments = displayDocuments;
+        displayDocuments = function(docs) {
+            // Re-calculate groups to store them in currentGroups
+            currentGroups = docs.reduce((acc, doc) => {
+                const groupKey = doc.thread_id; 
+                if (!acc[groupKey]) {
+                    acc[groupKey] = {
+                        docs: [],
+                        latestDate: new Date(0),
+                        sender_email: doc.sender_email || 'N/A',
+                        sender_name: doc.sender_name || 'Unknown',
+                        email_subject: doc.email_subject || 'Direct Upload',
+                        email_body: doc.email_body,
+                        thread_id: doc.thread_id
+                    };
+                }
+                acc[groupKey].docs.push(doc);
+                try {
+                    const docDate = doc.uploaded_at ? new Date(doc.uploaded_at) : new Date(0);
+                    if (!isNaN(docDate.getTime()) && docDate > acc[groupKey].latestDate) {
+                        acc[groupKey].latestDate = docDate;
+                        // Keep the latest email subject for the header
+                        if (doc.email_subject && doc.email_subject !== 'Direct Upload') {
+                            acc[groupKey].email_subject = doc.email_subject;
+                        }
+                    }
+                } catch (e) {}
+                return acc;
+            }, {});
+            
+            originalDisplayDocuments(docs);
+        };
     </script>
 </body>
 
 </html>
-
-
-
-
-

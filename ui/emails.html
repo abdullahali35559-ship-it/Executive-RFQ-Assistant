@@ -87,6 +87,12 @@
             color: #991B1B;
         }
 
+        .status-junk {
+            background: #F3F4F6;
+            color: #4B5563;
+            border: 1px solid #D1D5DB;
+        }
+
         .actions {
             display: flex;
             gap: var(--space-2);
@@ -204,7 +210,10 @@
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="index.html" class="nav-brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><span>RFI</span></a>
+            <a href="index.html" class="nav-brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="var(--primary-orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg><span>RFI</span></a>
 
             <ul class="nav-links">
                 <li><a href="index.html" class="nav-link">Dashboard</a></li>
@@ -218,8 +227,7 @@
                     <span class="status-indicator status-online"></span>
                     Online
                 </span>
-                <button onclick="localStorage.removeItem('token'); window.location.href='/login.html'"
-                    class="btn btn-secondary btn-sm"
+                <button onclick="Auth.logout()" class="btn btn-secondary btn-sm"
                     style="margin-left: 8px; border: 1px solid var(--border-light); background: white; color: var(--text-primary);">
                     Sign Out
                 </button>
@@ -308,7 +316,11 @@
                     </a>
                 </li>
                 <li class="sidebar-item">
-                    <a href="assistant.html" class="sidebar-link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>RFI Assistant</a>
+                    <a href="assistant.html" class="sidebar-link"><svg width="18" height="18" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>RFI Assistant</a>
                 </li>
                 <li class="sidebar-item">
                     <a href="settings.html" class="sidebar-link">
@@ -443,8 +455,8 @@
     </div>
 
     <!-- JavaScript -->
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
+    <script src="js/auth.js?v=2.4"></script>
+    <script src="js/api.js?v=2.4"></script>
     <script>
         function showToast(message, type = 'info') {
             let container = document.querySelector('.toast-container');
@@ -479,7 +491,15 @@
         let allEmails = [];
 
         // Load emails on page load
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.RFQAgentAPIReady) {
+                initEmails();
+            } else {
+                window.addEventListener('RFQAgentAPIReady', initEmails);
+            }
+        });
+
+        async function initEmails() {
             console.log('Emails page loaded, fetching data...');
 
             // Check for thread_id in URL
@@ -508,7 +528,8 @@
                     closeModal();
                 }
             }
-        });
+        }
+
 
         async function loadEmails(filters = {}) {
             try {
@@ -608,7 +629,7 @@
                 }
 
                 const suggestedTagsHtml = suggestedArray.map(tagName =>
-                    `<span class="tag-suggested" onclick="confirmSuggestedTags(${email.id})" title="Click to confirm AI suggestion">
+                    `<span class="tag-suggested" onclick="confirmSuggestedTags('${email.id}')" title="Click to confirm AI suggestion">
                         ${tagName}
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </span>`
@@ -633,8 +654,8 @@
                         <div class="tag-container">
                             ${activeTagsHtml}
                             ${suggestedTagsHtml}
-                            ${(email.tags_suggested && email.tags_suggested.length > 0) ? `<button class="btn-confirm-all" onclick="confirmSuggestedTags(${email.id})" title="Confirm all suggestions">Confirm All</button>` : ''}
-                            <button class="btn-add-tag" onclick="addManualTag(${email.id})" title="Add manual tag">+</button>
+                            ${(email.tags_suggested && email.tags_suggested.length > 0) ? `<button class="btn-confirm-all" onclick="confirmSuggestedTags('${email.id}')" title="Confirm all suggestions">Confirm All</button>` : ''}
+                            <button class="btn-add-tag" onclick="addManualTag('${email.id}')" title="Add manual tag">+</button>
                         </div>
                     </td>
                     <td style="white-space: nowrap;">${formattedDate}</td>
@@ -648,11 +669,9 @@
                                     <circle cx="12" cy="12" r="3"></circle>
                                 </svg>
                             </button>
-                            <button class="btn-icon" title="Archive" onclick="archiveEmail('${email.id}')">
+                            <button class="btn-icon" title="Mark as Seen" onclick="archiveEmail('${email.id}')">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="21 8 21 21 3 21 3 8"></polyline>
-                                    <rect x="1" y="3" width="22" height="5"></rect>
-                                    <line x1="10" y1="12" x2="14" y2="12"></line>
+                                    <polyline points="20 6 9 17 4 12"></polyline>
                                 </svg>
                             </button>
                         </div>
@@ -835,8 +854,3 @@
 </body>
 
 </html>
-
-
-
-
-

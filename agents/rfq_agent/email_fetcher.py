@@ -163,8 +163,13 @@ class EmailFetcher:
             date_str = msg.get('Date', '')
             body = self._extract_body(msg)
             attachments = self._extract_attachments(msg)
+            message_id = msg.get('Message-ID', '')
+            in_reply_to = msg.get('In-Reply-To', '')
+            
             return {
                 'email_id': f"{self.provider}_{msg_id}",
+                'message_id': message_id,
+                'in_reply_to': in_reply_to,
                 'subject': subject,
                 'sender': sender_email,
                 'sender_name': sender_name,
