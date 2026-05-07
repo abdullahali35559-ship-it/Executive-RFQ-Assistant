@@ -1,7 +1,7 @@
 // RFQ Agent - API Client
 // Handles all communication with FastAPI backend
 
-const API_BASE_URL = window.location.port ? window.location.origin : `${window.location.origin}:8069`;
+const API_BASE_URL = window.location.origin;
 
 class RFQAgentAPI {
     constructor() {
