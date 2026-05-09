@@ -217,10 +217,13 @@ function openEventModal(event) {
             if (att.response === 'declined') statusIcon = '<div style="width: 8px; height: 8px; border-radius: 50%; background: #EF4444;"></div>';
             if (att.response === 'needsAction' || att.response === 'tentative') statusIcon = '<div style="width: 8px; height: 8px; border-radius: 50%; background: #F59E0B;"></div>';
 
+            const displayName = (typeof att === 'string') ? att : (att.name || att.email || 'Unknown');
+            const status = (typeof att === 'string') ? 'pending' : (att.response || 'pending');
+
             span.innerHTML = `
                 ${statusIcon}
-                ${att.name || att.email}
-                <span style="font-size: 0.65rem; opacity: 0.6; margin-left: 2px;">(${att.response || 'pending'})</span>
+                ${displayName}
+                <span style="font-size: 0.65rem; opacity: 0.6; margin-left: 2px;">(${status})</span>
             `;
             attContainer.appendChild(span);
         });

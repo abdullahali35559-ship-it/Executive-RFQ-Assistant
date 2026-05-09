@@ -468,11 +468,10 @@ async function loadPendingDrafts() {
 }
 
 async function loadAgendaWidget(eventsData = null) {
-    const list = document.getElementById('agendaWidgetList');
+    const list = document.getElementById('dashboardMeetingsList');
     if (!list) return;
 
     try {
-        // Use provided data or fetch if missing
         let events = eventsData;
         if (!events) {
             const response = await window.RFQAgentAPI.getCalendarEvents(7);
@@ -484,21 +483,14 @@ async function loadAgendaWidget(eventsData = null) {
             if (!ev.start) return false;
             const evDate = new Date(ev.start);
             if (isNaN(evDate.getTime())) return false;
-            // Show meetings from today onwards
-            const diff = (evDate - now) / (1000 * 60 * 60 * 24);
-            return diff >= -0.5 && diff <= 7;
+            // Only show events that haven't ended yet
+            const evEnd = ev.end ? new Date(ev.end) : new Date(evDate.getTime() + 30*60000);
+            return evEnd > now;
         }).sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 5);
-
-        // Safe title update
-        const container = list.closest('.recent-activity');
-        if (container) {
-            const titleEl = container.querySelector('.card-title');
-            if (titleEl) titleEl.textContent = "Coming Up on Calendar";
-        }
 
         if (upcomingEvents.length === 0) {
             list.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">
-                <p style="font-size: 0.85rem;">No meetings scheduled for this week.</p>
+                <p style="font-size: 0.85rem;">No more meetings scheduled for today.</p>
             </div>`;
             return;
         }
@@ -507,28 +499,28 @@ async function loadAgendaWidget(eventsData = null) {
             const startDate = new Date(ev.start);
             const timeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const isToday = startDate.toDateString() === now.toDateString();
-            const dayStr = isToday ? 'Today' : startDate.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-            const isHold = ev.title.includes('[HOLD]');
-
+            const dayStr = isToday ? 'Today' : startDate.toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+            
             const attendees = ev.attendees || [];
-            const attendeeText = attendees.length > 0 ? `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">With: ${attendees.map(a => a.name || a.email.split('@')[0]).join(', ')}</div>` : '';
+            const attendeeText = attendees.length > 0 ? 
+                `<div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">With: ${attendees.slice(0, 2).map(a => typeof a === 'string' ? a.split('@')[0] : (a.name || a.email.split('@')[0])).join(', ')}${attendees.length > 2 ? ' + others' : ''}</div>` 
+                : '';
 
             return `
-                <div class="activity-item" style="padding: 12px 16px; ${isHold ? 'background: rgba(255, 92, 53, 0.04);' : ''}">
-                    <div style="width: 70px; font-weight: 700; font-size: 0.75rem; color: ${isHold ? 'var(--text-muted)' : 'var(--primary-orange)'}; line-height: 1.2;">
-                        <div>${timeStr}</div>
-                        <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 400;">${dayStr}</div>
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary);">
-                            ${isHold ? '<span style="color: var(--primary-orange); font-size: 0.65rem; background: #FFF4F0; padding: 1px 4px; border-radius: 4px; margin-right: 4px;">HOLD</span>' : ''}
-                            ${ev.title.replace('[HOLD]', '')}
+                <div class="activity-item" style="padding: 12px 16px; border-bottom: 1px solid #f3f4f6; flex-direction: column; align-items: flex-start; gap: 4px;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: flex-start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary);">${ev.title}</div>
+                            <div style="font-size: 0.75rem; color: var(--primary-orange); font-weight: 600; margin-top: 2px;">
+                                ${dayStr} at ${timeStr}
+                            </div>
+                            ${attendeeText}
                         </div>
-                        ${attendeeText}
-                        <div style="font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 4px;">
-                            <div style="width: 6px; height: 6px; border-radius: 50%; background: ${ev.color}; opacity: 0.8;"></div>
-                            ${ev.source}
-                        </div>
+                        ${ev.link ? `
+                            <a href="${ev.link}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.7rem; padding: 4px 10px; background: #FFF4F0; color: var(--primary-orange); border: 1px solid var(--primary-orange); box-shadow: none;">
+                                Join
+                            </a>
+                        ` : ''}
                     </div>
                 </div>
             `;

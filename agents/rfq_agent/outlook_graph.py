@@ -565,6 +565,40 @@ class OutlookGraphFetcher:
                 'error': str(e)
             }
     
+    def send_immediate_email(self, to: str, subject: str, body: str) -> Dict:
+        """Send an email directly without creating a draft first"""
+        try:
+            url = f'{self.base_url}/me/sendMail'
+            payload = {
+                "message": {
+                    "subject": subject,
+                    "body": {
+                        "contentType": "Text",
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {
+                            "emailAddress": {
+                                "address": to
+                            }
+                        }
+                    ]
+                }
+            }
+            response = requests.post(
+                url,
+                headers=self._get_headers(),
+                json=payload,
+                timeout=30
+            )
+            if response.status_code == 202:
+                return {'success': True}
+            else:
+                raise Exception(f"Graph API error: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"[X] Error sending immediate Outlook email: {e}")
+            return {'success': False, 'error': str(e)}
+
     def delete_draft(self, draft_id: str) -> Dict:
         """
         Delete a draft email
@@ -708,7 +742,7 @@ class OutlookGraphFetcher:
     def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "") -> Dict:
         """Create a new calendar event in Outlook"""
         try:
-            url = f'{self.base_url}/me/events'
+            url = f'{self.base_url}/me/events?sendInvitations=all'
             
             event_payload = {
                 "subject": title,

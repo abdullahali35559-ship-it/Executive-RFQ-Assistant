@@ -399,24 +399,84 @@ async def create_calendar_event(data: dict, current_user: User = Depends(get_cur
     """Create an event in either Google or Outlook"""
     provider = data.get('provider', 'google')
     title = data.get('title', 'RFI Meeting')
-    start = data.get('start')
-    end = data.get('end')
+    start = data.get('start') or data.get('start_time')
+    end = data.get('end') or data.get('end_time')
     attendees = data.get('attendees', [])
     description = data.get('description', "")
     
+    notify_guests = data.get('notify_guests', False)
+    
     if not start or not end:
-        raise HTTPException(status_code=400, detail="Start and End times required")
+        raise HTTPException(status_code=400, detail=f"Start and End times required. Received: start={start}, end={end}")
         
     try:
         if provider == 'outlook':
             fetcher = OutlookGraphFetcher()
             if not fetcher.connect(): return {"success": False, "error": "Outlook not connected"}
             result = fetcher.create_calendar_event(title, start, end, attendees, description)
+            
+            # Send Professional Email if requested
+            if result.get('success') and notify_guests and attendees:
+                event_data = result.get('event', {})
+                meeting_link = event_data.get('webLink')
+                start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                formatted_time = start_dt.strftime('%A, %d %B %Y at %I:%M %p')
+                
+                email_body = f"""
+Dear Participant,
+
+You have been invited to a professional business meeting via RFI Enterprise Intelligence.
+
+MEETING DETAILS:
+TITLE: {title}
+TIME: {formatted_time} (UTC)
+AGENDA: {description or 'General Business Discussion'}
+
+JOIN MEETING:
+{meeting_link}
+
+This meeting has been synchronized with your business calendar. We look forward to your presence.
+
+Regards,
+RFI Executive Assistant
+"""
+                for guest in attendees:
+                    fetcher.send_immediate_email(guest, f"Business Meeting Invitation: {title}", email_body)
+
             return result
         else:
             fetcher = GmailAPIFetcher()
             if not fetcher.connect(): return {"success": False, "error": "Gmail not connected"}
             result = fetcher.create_calendar_event(title, start, end, attendees, description)
+
+            # Send Professional Email if requested
+            if result.get('success') and notify_guests and attendees:
+                event_data = result.get('event', {})
+                meeting_link = event_data.get('htmlLink')
+                start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                formatted_time = start_dt.strftime('%A, %d %B %Y at %I:%M %p')
+
+                email_body = f"""
+Dear Participant,
+
+You have been invited to a professional business meeting via RFI Enterprise Intelligence.
+
+MEETING DETAILS:
+TITLE: {title}
+TIME: {formatted_time} (UTC)
+AGENDA: {description or 'General Business Discussion'}
+
+JOIN MEETING:
+{meeting_link}
+
+This meeting has been synchronized with your business calendar. We look forward to your presence.
+
+Regards,
+RFI Executive Assistant
+"""
+                for guest in attendees:
+                    fetcher.send_immediate_email(guest, f"Business Meeting Invitation: {title}", email_body)
+
             return result
     except Exception as e:
         return {"success": False, "error": str(e)}

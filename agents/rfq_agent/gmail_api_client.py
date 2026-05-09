@@ -618,7 +618,7 @@ class GmailAPIFetcher:
                 },
             }
             
-            event = cal_service.events().insert(calendarId='primary', body=event).execute()
+            event = cal_service.events().insert(calendarId='primary', body=event, sendUpdates='all').execute()
             return {'success': True, 'event': event}
         except Exception as e:
             print(f"[X] Error creating Google event: {e}")
