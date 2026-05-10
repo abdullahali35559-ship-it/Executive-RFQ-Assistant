@@ -308,13 +308,13 @@ CALENDAR_CACHE = {
 }
 
 @router.get("/api/calendar/events")
-async def get_calendar_events(days: int = 30, current_user: User = Depends(get_current_user)):
+async def get_calendar_events(days: int = 30, refresh: bool = False, current_user: User = Depends(get_current_user)):
     """Fetch events from both Google and Outlook with simple caching"""
     global CALENDAR_CACHE
     
     now = time.time()
     # Return cached data if not expired and not forcing refresh
-    if CALENDAR_CACHE["data"] and (now - CALENDAR_CACHE["last_updated"] < CALENDAR_CACHE["expiry"]):
+    if not refresh and CALENDAR_CACHE["data"] and (now - CALENDAR_CACHE["last_updated"] < CALENDAR_CACHE["expiry"]):
         return {"success": True, "data": CALENDAR_CACHE["data"], "cached": True}
         
     all_events = []
@@ -325,6 +325,7 @@ async def get_calendar_events(days: int = 30, current_user: User = Depends(get_c
             outlook = OutlookGraphFetcher()
             if outlook.connect():
                 events = outlook.fetch_calendar_events(days=days)
+                print(f"DEBUG: Fetched {len(events)} events from Outlook")
                 all_events.extend(events)
     except Exception as e:
         print(f"Dashboard: Outlook fetch error: {e}")
@@ -335,11 +336,13 @@ async def get_calendar_events(days: int = 30, current_user: User = Depends(get_c
             gmail = GmailAPIFetcher()
             if gmail.connect():
                 events = gmail.fetch_calendar_events(days=days)
+                print(f"DEBUG: Fetched {len(events)} events from Gmail")
                 all_events.extend(events)
     except Exception as e:
         print(f"Dashboard: Google fetch error: {e}")
         
     # Sort by start time
+    print(f"DEBUG: Total combined events: {len(all_events)}")
     all_events.sort(key=lambda x: x['start'])
     
     # Update cache
@@ -405,10 +408,15 @@ async def create_calendar_event(data: dict, current_user: User = Depends(get_cur
     description = data.get('description', "")
     
     notify_guests = data.get('notify_guests', False)
+    print(f"DEBUG: Incoming Calendar Data: {data}")
     
     if not start or not end:
         raise HTTPException(status_code=400, detail=f"Start and End times required. Received: start={start}, end={end}")
         
+    global CALENDAR_CACHE
+    # Clear cache so next fetch gets the new event
+    CALENDAR_CACHE["data"] = []
+    
     try:
         if provider == 'outlook':
             fetcher = OutlookGraphFetcher()
@@ -440,19 +448,53 @@ This meeting has been synchronized with your business calendar. We look forward 
 Regards,
 RFI Executive Assistant
 """
+                print(f"DEBUG: Outlook Event Created. Link: {meeting_link}")
+                
+                start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                formatted_time = start_dt.strftime('%A, %d %B %Y at %I:%M %p')
+                
+                email_body = f"""
+Dear Participant,
+
+You have been invited to a professional business meeting via RFI Enterprise Intelligence.
+
+MEETING DETAILS:
+TITLE: {title}
+TIME: {formatted_time} (UTC)
+AGENDA: {description or 'General Business Discussion'}
+
+JOIN MEETING:
+{meeting_link}
+
+This meeting has been synchronized with your business calendar. We look forward to your presence.
+
+Regards,
+RFI Executive Assistant
+"""
+                print(f"DEBUG: Sending Professional Email with UNIQUE subject to {len(attendees)} guests (Outlook)")
                 for guest in attendees:
-                    fetcher.send_immediate_email(guest, f"Business Meeting Invitation: {title}", email_body)
+                    res = fetcher.send_immediate_email(guest, f"[CONFIRMED] Business Meeting Invitation: {title}", email_body)
+                    print(f"DEBUG: Email to {guest} result: {res}")
 
             return result
         else:
             fetcher = GmailAPIFetcher()
             if not fetcher.connect(): return {"success": False, "error": "Gmail not connected"}
-            result = fetcher.create_calendar_event(title, start, end, attendees, description)
-
-            # Send Professional Email if requested
-            if result.get('success') and notify_guests and attendees:
-                event_data = result.get('event', {})
-                meeting_link = event_data.get('htmlLink')
+            # 1. First create the event to get the link
+            event = fetcher.create_calendar_event(title, start, end, attendees, description)
+            
+            if event and notify_guests and attendees:
+                # Prioritize Meet link
+                meeting_link = event.get('hangoutLink')
+                if not meeting_link:
+                    eps = event.get('conferenceData', {}).get('entryPoints', [])
+                    meeting_link = next((ep['uri'] for ep in eps if ep['entryPointType'] == 'video'), None)
+                if not meeting_link:
+                    meeting_link = event.get('htmlLink')
+                
+                print(f"DEBUG: Google Event Created. Link: {meeting_link}")
+                
+                # 2. Update subject and body for a UNIQUE thread
                 start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
                 formatted_time = start_dt.strftime('%A, %d %B %Y at %I:%M %p')
 
@@ -474,9 +516,12 @@ This meeting has been synchronized with your business calendar. We look forward 
 Regards,
 RFI Executive Assistant
 """
+                print(f"DEBUG: Sending Professional Email with UNIQUE subject to {len(attendees)} guests")
                 for guest in attendees:
-                    fetcher.send_immediate_email(guest, f"Business Meeting Invitation: {title}", email_body)
+                    # Added [IMPORTANT] and Title to make it stand out from the auto-invite
+                    res = fetcher.send_immediate_email(guest, f"[CONFIRMED] Business Meeting Invitation: {title}", email_body)
+                    print(f"DEBUG: Email to {guest} result: {res}")
 
-            return result
+            return {"success": True, "event": event} if event else {"success": False, "error": "Event creation failed"}
     except Exception as e:
         return {"success": False, "error": str(e)}

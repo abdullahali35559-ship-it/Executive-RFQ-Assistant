@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
@@ -81,26 +81,59 @@ async def assistant_chat(request: dict, current_user: User = Depends(get_current
         query = request.get("query")
         mode = request.get("mode", "enterprise")
         conversation_id = request.get("conversation_id")
+        context = request.get("context") # Text from uploaded file
         
-        if not query:
-            raise HTTPException(status_code=400, detail="Missing query")
+        if not query and not context:
+            raise HTTPException(status_code=400, detail="Missing query or context")
         
         # Create new conversation if missing
         if not conversation_id:
             from database.models import AssistantConversation
-            new_conv = AssistantConversation(title=query[:30] + "...", mode=mode)
+            title = query[:30] + "..." if query else "Document Analysis"
+            new_conv = AssistantConversation(title=title, mode=mode)
             db.add(new_conv)
             db.commit()
             db.refresh(new_conv)
             conversation_id = new_conv.id
         
         assistant = ExecutiveAssistant(db)
-        response = assistant.answer_query(query, conversation_id=conversation_id, mode=mode)
+        response = assistant.answer_query(query, conversation_id=conversation_id, mode=mode, external_context=context)
         
         return {
             "success": True,
             "response": response,
             "conversation_id": conversation_id
         }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@router.post("/api/assistant/extract-text")
+async def assistant_extract_text(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    try:
+        import os
+        import tempfile
+        from agents.rfq_agent.cloud_file_downloader import CloudFileDownloader
+        
+        # Save temp file
+        suffix = os.path.splitext(file.filename)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+        
+        try:
+            # Reuse existing extractor logic
+            downloader = CloudFileDownloader()
+            text = downloader._extract_text(tmp_path)
+            
+            os.unlink(tmp_path)
+            
+            if not text:
+                return {"success": False, "error": "Could not extract text from this file."}
+                
+            return {"success": True, "text": text}
+        except Exception as e:
+            if os.path.exists(tmp_path): os.unlink(tmp_path)
+            raise e
+            
     except Exception as e:
         return {"success": False, "error": str(e)}

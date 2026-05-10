@@ -525,19 +525,74 @@ class GmailAPIFetcher:
             return {'success': False, 'error': str(e)}
 
     def send_immediate_email(self, to: str, subject: str, body: str) -> Dict:
-        """Send an email directly without creating a draft first"""
+        """Send a high-end professional HTML email"""
+        print(f"DEBUG: Attempting to send elite email to {to} with subject: {subject}")
         try:
-            message = MIMEText(body)
+            from email.mime.text import MIMEText
+            import base64
+            import re
+            
+            # Extract meeting link if present to create a button
+            link_match = re.search(r'https://\S+', body)
+            meeting_link = link_match.group(0) if link_match else "#"
+            print(f"DEBUG: Extracted meeting link: {meeting_link}")
+            
+            # Clean body by removing the raw link and adding structure
+            clean_body = body.replace(meeting_link, "").strip()
+            
+            html_body = f"""
+            <html>
+            <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1f2937; background-color: #f9fafb; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <div style="background-color: #111827; padding: 30px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 20px; letter-spacing: 1px; text-transform: uppercase;">Executive Meeting Invitation</h1>
+                        <p style="color: #9ca3af; margin: 10px 0 0; font-size: 14px;">Powered by RFI Enterprise Intelligence</p>
+                    </div>
+                    
+                    <!-- Content -->
+                    <div style="padding: 40px;">
+                        <div style="margin-bottom: 30px; white-space: pre-wrap; font-size: 15px;">
+                            {clean_body.replace('\n', '<br>')}
+                        </div>
+                        
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 40px 0;">
+                            <a href="{meeting_link}" style="background-color: #FF5C35; color: #ffffff; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 10px 15px -3px rgba(255, 92, 53, 0.3);">
+                                JOIN MEETING
+                            </a>
+                        </div>
+                        
+                        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; border-left: 4px solid #FF5C35;">
+                            <p style="margin: 0; font-size: 13px; color: #4b5563;">
+                                <strong>Note:</strong> This meeting has been automatically synchronized with your business calendar. Please ensure you are prepared with all relevant RFI documents.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                            &copy; 2026 RFI Strategic Assistant | Confidential Business Intelligence
+                        </p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            
+            message = MIMEText(html_body, 'html')
             message['to'] = to
             message['subject'] = subject
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             
-            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-            create_body = {'raw': raw_message}
+            self.connect()
+            if not self.service: return {'success': False, 'error': 'Not connected'}
             
-            result = self.service.users().messages().send(userId='me', body=create_body).execute()
-            return {'success': True, 'message_id': result['id']}
+            self.service.users().messages().send(userId='me', body={'raw': raw}).execute()
+            return {'success': True}
         except Exception as e:
-            print(f"[X] Error sending immediate email: {e}")
+            print(f"[X] Error sending elite Gmail: {e}")
             return {'success': False, 'error': str(e)}
 
     def delete_draft(self, draft_id: str) -> Dict:
@@ -560,12 +615,13 @@ class GmailAPIFetcher:
             # We need the calendar service
             cal_service = build('calendar', 'v3', credentials=self.credentials)
             
-            now = datetime.utcnow().isoformat() + 'Z'
+            # Fetch from 7 days ago to support viewing recent past events on the calendar
+            start_time = (datetime.utcnow() - timedelta(days=7)).isoformat() + 'Z'
             max_time = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
             
             events_result = cal_service.events().list(
                 calendarId='primary',
-                timeMin=now,
+                timeMin=start_time,
                 timeMax=max_time,
                 singleEvents=True,
                 orderBy='startTime'
@@ -578,6 +634,14 @@ class GmailAPIFetcher:
                 start = ev['start'].get('dateTime', ev['start'].get('date'))
                 end = ev['end'].get('dateTime', ev['end'].get('date'))
                 
+                # Prioritize Meet link over Calendar link
+                meeting_link = ev.get('hangoutLink')
+                if not meeting_link:
+                    eps = ev.get('conferenceData', {}).get('entryPoints', [])
+                    meeting_link = next((ep['uri'] for ep in eps if ep['entryPointType'] == 'video'), None)
+                if not meeting_link:
+                    meeting_link = ev.get('htmlLink', '')
+
                 formatted_events.append({
                     'id': ev['id'],
                     'title': ev.get('summary', 'No Title'),
@@ -585,7 +649,7 @@ class GmailAPIFetcher:
                     'end': end,
                     'source': 'google',
                     'location': ev.get('location', ''),
-                    'link': ev.get('htmlLink', ''),
+                    'link': meeting_link,
                     'description': ev.get('description', ''),
                     'attendees': [a.get('email', '') for a in ev.get('attendees', [])]
                 })
@@ -595,34 +659,103 @@ class GmailAPIFetcher:
             print(f"[X] Error fetching Google Calendar events: {e}")
             return []
 
-    def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "") -> Dict:
-        """Create a new calendar event in Google Calendar"""
+    def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "", notify_guests: bool = True) -> Dict:
+        """Create a new calendar event with triple-layered fallback for Meet generation"""
+        from datetime import datetime
+        import uuid
+        
         try:
             cal_service = build('calendar', 'v3', credentials=self.credentials)
+            req_id = f"rfi_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}"
             
-            event = {
+            base_event = {
                 'summary': title,
-                'location': 'RFI Managed Meeting',
                 'description': description,
-                'start': {
-                    'dateTime': start_iso,
-                    'timeZone': 'UTC',
-                },
-                'end': {
-                    'dateTime': end_iso,
-                    'timeZone': 'UTC',
-                },
-                'attendees': [{'email': email} for email in (attendees or [])],
-                'reminders': {
-                    'useDefault': True
-                },
+                'start': {'dateTime': start_iso},
+                'end': {'dateTime': end_iso},
+                'attendees': [{'email': e} for e in (attendees or [])]
             }
-            
-            event = cal_service.events().insert(calendarId='primary', body=event, sendUpdates='all').execute()
-            return {'success': True, 'event': event}
+
+            final_event = None
+
+            # LAYER 1: Standard Create with Meet
+            try:
+                print("DEBUG: Layer 1 (Standard Create with Meet)...")
+                event_body = {
+                    **base_event,
+                    'conferenceData': {
+                        'createRequest': {
+                            'requestId': req_id,
+                            'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                        }
+                    }
+                }
+                final_event = cal_service.events().insert(
+                    calendarId='primary', 
+                    body=event_body,
+                    conferenceDataVersion=1,
+                    sendUpdates='none'
+                ).execute()
+                print("DEBUG: Layer 1 Success")
+            except Exception as e1:
+                print(f"DEBUG: Layer 1 failed ({e1}), trying Layer 2 (Simple Insert)...")
+                
+                # LAYER 2: Simple insert without Meet (Fail-safe)
+                final_event = cal_service.events().insert(
+                    calendarId='primary', 
+                    body=base_event,
+                    sendUpdates='none'
+                ).execute()
+                print("DEBUG: Layer 2 (Simple Insert) Success")
+                
+                # LAYER 3: Try to add Meet after creation (Optional patch)
+                try:
+                    print("DEBUG: Layer 3 (Patch Meet)...")
+                    patch_body = {
+                        'conferenceData': {
+                            'createRequest': {
+                                'requestId': f"patch_{req_id}",
+                                'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                            }
+                        }
+                    }
+                    final_event = cal_service.events().patch(
+                        calendarId='primary',
+                        eventId=final_event['id'],
+                        body=patch_body,
+                        conferenceDataVersion=1
+                    ).execute()
+                    print("DEBUG: Layer 3 Success")
+                except Exception as e3:
+                    print(f"DEBUG: Layer 3 failed ({e3}), sticking with Layer 2 result.")
+
+            # --- EXTRA: Inject JOIN MEETING link into description for maximum visibility ---
+            try:
+                # Extract meeting link
+                meeting_link = final_event.get('hangoutLink')
+                if not meeting_link:
+                    eps = final_event.get('conferenceData', {}).get('entryPoints', [])
+                    meeting_link = next((ep['uri'] for ep in eps if ep['entryPointType'] == 'video'), None)
+                
+                if not meeting_link:
+                    meeting_link = final_event.get('htmlLink') # Last resort (Calendar Link)
+
+                # Inject into description and patch one last time
+                enhanced_desc = f"{description}\n\n--------------------------------\nJOIN MEETING: {meeting_link}\n--------------------------------"
+                final_event = cal_service.events().patch(
+                    calendarId='primary',
+                    eventId=final_event['id'],
+                    body={'description': enhanced_desc}
+                ).execute()
+                print(f"DEBUG: Link injected into description: {meeting_link}")
+            except Exception as ed:
+                print(f"DEBUG: Link injection failed: {ed}")
+
+            return final_event
+
         except Exception as e:
-            print(f"[X] Error creating Google event: {e}")
-            return {'success': False, 'error': str(e)}
+            print(f"[X] Critical Error in Google Event: {e}")
+            return None
 
     def disconnect(self):
         """Cleanup (no persistent connection for API)"""

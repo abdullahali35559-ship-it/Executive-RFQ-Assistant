@@ -360,29 +360,67 @@
             <!-- Email Providers -->
             <div class="settings-section">
                 <h2 class="section-title"><i class="fas fa-at"></i> Email Providers</h2>
+                
+                <!-- GMAIL -->
                 <div class="oauth-status">
                     <div class="oauth-info">
                         <div class="oauth-icon"><i class="fab fa-google" style="color: #EA4335;"></i></div>
                         <div><div style="font-weight: 600;">Gmail</div></div>
                     </div>
                     <div class="flex items-center gap-4">
-                        <div class="status-offline-large" id="gmailStatus"></div>
-                        <button class="btn btn-secondary btn-sm" onclick="configureGmail()">Connect</button>
+                        <div id="gmailConnectedBadge" class="connected-badge" style="display: none;">
+                            <i class="fas fa-check-circle"></i> Connected
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="btnConnectGmail" onclick="configureGmail()">Connect</button>
+                        <button class="btn btn-ghost btn-sm" id="btnDisconnectGmail" onclick="disconnectProvider('gmail')" style="display: none; color: var(--accent-red); font-size: 0.75rem;">
+                            <i class="fas fa-sign-out-alt"></i> Disconnect
+                        </button>
                     </div>
                 </div>
+
+                <!-- OUTLOOK -->
                 <div class="oauth-status">
                     <div class="oauth-info">
                         <div class="oauth-icon"><i class="fab fa-microsoft" style="color: #0078D4;"></i></div>
                         <div><div style="font-weight: 600;">Outlook</div></div>
                     </div>
                     <div class="flex items-center gap-4">
-                        <div class="status-online-large" id="outlookStatus"></div>
-                        <button class="btn btn-secondary btn-sm" onclick="viewOutlookSettings()">Connect</button>
+                        <div id="outlookConnectedBadge" class="connected-badge" style="display: none;">
+                            <i class="fas fa-check-circle"></i> Connected
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="btnConnectOutlook" onclick="viewOutlookSettings()">Connect</button>
+                        <button class="btn btn-ghost btn-sm" id="btnDisconnectOutlook" onclick="disconnectProvider('outlook')" style="display: none; color: var(--accent-red); font-size: 0.75rem;">
+                            <i class="fas fa-sign-out-alt"></i> Disconnect
+                        </button>
                     </div>
                 </div>
             </div>
         </main>
     </div>
+
+    <style>
+        .connected-badge {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .btn-ghost {
+            background: transparent;
+            border: none;
+            padding: 4px 8px;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .btn-ghost:hover { opacity: 1; text-decoration: underline; }
+    </style>
 
     <div id="toastContainer" class="toast-container"></div>
 
@@ -462,37 +500,99 @@
 
         async function loadOAuthStatus() {
             try {
-                const outlook = await window.RFQAgentAPI.getOAuthStatus();
-                document.getElementById('outlookStatus').className = (outlook.status === 'connected') ? 'status-online-large' : 'status-offline-large';
-                const gmail = await window.RFQAgentAPI.request('/api/gmail/oauth/status');
-                document.getElementById('gmailStatus').className = (gmail.authenticated) ? 'status-online-large' : 'status-offline-large';
-            } catch (e) {}
+                const outlookRes = await window.RFQAgentAPI.request('/api/oauth/status');
+                const outlookConnected = (outlookRes.status === 'connected');
+                document.getElementById('outlookConnectedBadge').style.display = outlookConnected ? 'flex' : 'none';
+                document.getElementById('btnDisconnectOutlook').style.display = outlookConnected ? 'block' : 'none';
+                
+                // Only hide loading if we are actually connected
+                if (outlookConnected) {
+                    document.getElementById('btnConnectOutlook').style.display = 'none';
+                    document.getElementById('btnConnectOutlook').disabled = false;
+                    document.getElementById('btnConnectOutlook').innerText = 'Connect';
+                } else {
+                    // Show connect button if NOT in loading state
+                    if (!document.getElementById('btnConnectOutlook').innerHTML.includes('fa-spinner')) {
+                        document.getElementById('btnConnectOutlook').style.display = 'block';
+                    }
+                }
+                
+                const gmailRes = await window.RFQAgentAPI.request('/api/gmail/oauth/status');
+                const gmailConnected = gmailRes.authenticated;
+                document.getElementById('gmailConnectedBadge').style.display = gmailConnected ? 'flex' : 'none';
+                document.getElementById('btnDisconnectGmail').style.display = gmailConnected ? 'block' : 'none';
+                
+                if (gmailConnected) {
+                    document.getElementById('btnConnectGmail').style.display = 'none';
+                    document.getElementById('btnConnectGmail').disabled = false;
+                    document.getElementById('btnConnectGmail').innerText = 'Connect';
+                } else {
+                    if (!document.getElementById('btnConnectGmail').innerHTML.includes('fa-spinner')) {
+                        document.getElementById('btnConnectGmail').style.display = 'block';
+                    }
+                }
+            } catch (e) { console.error('OAuth status check failed', e); }
+        }
+
+        // Poll for status every 500ms if a login is in progress (Super Fast)
+        setInterval(() => {
+            const outlookLoading = document.getElementById('btnConnectOutlook').innerHTML.includes('fa-spinner');
+            const gmailLoading = document.getElementById('btnConnectGmail').innerHTML.includes('fa-spinner');
+            if (outlookLoading || gmailLoading) {
+                loadOAuthStatus();
+            }
+        }, 500);
+
+        // Also refresh when user comes back to this tab
+        window.onfocus = loadOAuthStatus;
+
+        async function disconnectProvider(provider) {
+            if (!confirm(`Are you sure you want to disconnect ${provider}?`)) return;
+            try {
+                const res = await window.RFQAgentAPI.request(`/api/${provider}/oauth/logout`, { method: 'POST' });
+                if (res.success) {
+                    showToast(`${provider} disconnected successfully`);
+                    loadOAuthStatus();
+                }
+            } catch (e) { showToast(`Failed to disconnect ${provider}`, 'error'); }
         }
 
         async function configureGmail() {
+            const btn = document.getElementById('btnConnectGmail');
             try {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
                 const res = await window.RFQAgentAPI.request('/api/gmail/oauth/login');
                 if (res.auth_url) {
                     const win = window.open(res.auth_url, 'GmailLogin', 'width=600,height=700');
                     if (!win || win.closed || typeof win.closed == 'undefined') {
-                        // Popup blocked - use direct redirect
                         window.location.href = res.auth_url;
                     }
                 }
-            } catch (e) { alert('Failed to start Gmail connection'); }
+            } catch (e) { 
+                alert('Failed to start Gmail connection'); 
+                btn.disabled = false;
+                btn.innerText = 'Connect';
+            }
         }
 
         async function viewOutlookSettings() {
+            const btn = document.getElementById('btnConnectOutlook');
             try {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
                 const res = await window.RFQAgentAPI.request('/api/outlook/oauth/login');
                 if (res.auth_url) {
                     const win = window.open(res.auth_url, 'OutlookLogin', 'width=600,height=700');
                     if (!win || win.closed || typeof win.closed == 'undefined') {
-                        // Popup blocked - use direct redirect
                         window.location.href = res.auth_url;
                     }
                 }
-            } catch (e) { alert('Failed to start Outlook connection'); }
+            } catch (e) { 
+                alert('Failed to start Outlook connection'); 
+                btn.disabled = false;
+                btn.innerText = 'Connect';
+            }
         }
     </script>
 </body>

@@ -76,16 +76,16 @@ async def outlook_oauth_callback(request: Request, background_tasks: BackgroundT
                         <div class="icon">✅</div>
                         <h1>Outlook Connected!</h1>
                         <p>Your executive RFI agent is now synchronized with your Outlook workspace.</p>
-                        <div class="timer">Closing in <span id="sec">3</span>s...</div>
+                        <div class="timer">Closing in <span id="sec">1</span>s...</div>
                     </div>
                     <script>
-                        let s = 3;
+                        let s = 1;
                         setInterval(() => {{
                             s--;
                             document.getElementById('sec').innerText = s;
                             if (s <= 0) window.close();
                         }}, 1000);
-                        setTimeout(() => window.close(), 3500);
+                        setTimeout(() => window.close(), 1200);
                     </script>
                 </body>
             </html>
@@ -150,16 +150,16 @@ async def gmail_oauth_callback(request: Request, background_tasks: BackgroundTas
                     <div class="icon">📩</div>
                     <h1>Gmail Connected!</h1>
                     <p>Authentication successful. The RFI agent is now connected to your Gmail account.</p>
-                    <div class="timer">Closing in <span id="sec">3</span>s...</div>
+                    <div class="timer">Closing in <span id="sec">1</span>s...</div>
                 </div>
                 <script>
-                    let s = 3;
+                    let s = 1;
                     setInterval(() => {{
                         s--;
                         document.getElementById('sec').innerText = s;
                         if (s <= 0) window.close();
                     }}, 1000);
-                    setTimeout(() => window.close(), 3500);
+                    setTimeout(() => window.close(), 1200);
                 </script>
             </body>
         </html>
@@ -206,3 +206,17 @@ async def get_oauth_status(request: Request):
         "gmail": "connected" if gmail_connected else "disconnected",
         "authenticated": gmail_connected or outlook_connected
     }
+
+@router.post("/api/gmail/oauth/logout")
+async def gmail_logout():
+    token_file = Path(".gmail_oauth_token.json")
+    if token_file.exists():
+        token_file.unlink()
+    return {"success": True, "message": "Gmail disconnected"}
+
+@router.post("/api/outlook/oauth/logout")
+async def outlook_logout():
+    token_file = Path(".outlook_oauth_token.json")
+    if token_file.exists():
+        token_file.unlink()
+    return {"success": True, "message": "Outlook disconnected"}

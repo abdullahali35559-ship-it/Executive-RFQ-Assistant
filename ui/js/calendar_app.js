@@ -240,15 +240,18 @@ function openEventModal(event) {
         descSection.style.display = 'none';
     }
 
-    // Join Link
+    // Join Link handling
     const linkBtn = document.getElementById('modalEventLink');
     const copyBtn = document.getElementById('modalCopyLink');
-    if (props.link) {
+    const meetingLink = props.link || event.url || '#';
+
+    if (meetingLink && meetingLink !== '#') {
         linkBtn.style.display = 'inline-flex';
-        linkBtn.href = props.link;
+        linkBtn.href = meetingLink;
+        
         if (copyBtn) {
             copyBtn.style.display = 'inline-flex';
-            copyBtn.setAttribute('data-link', props.link);
+            copyBtn.setAttribute('data-link', meetingLink);
         }
     } else {
         linkBtn.style.display = 'none';

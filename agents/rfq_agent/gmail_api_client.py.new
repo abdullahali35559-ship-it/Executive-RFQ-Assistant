@@ -1,0 +1,74 @@
+    def create_calendar_event(self, title: str, start_iso: str, end_iso: str, attendees: List[str] = None, description: str = "", notify_guests: bool = True) -> Dict:
+        """Create a new calendar event with triple-layered fallback for Meet generation"""
+        from datetime import datetime
+        import uuid
+        
+        try:
+            cal_service = build('calendar', 'v3', credentials=self.credentials)
+            req_id = f"rfi_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}"
+            
+            base_event = {
+                'summary': title,
+                'description': description,
+                'start': {'dateTime': start_iso},
+                'end': {'dateTime': end_iso},
+                'attendees': [{'email': e} for e in (attendees or [])]
+            }
+
+            # LAYER 1: Standard Create with Meet
+            try:
+                print("DEBUG: Layer 1 (Standard Create with Meet)...")
+                event_body = {
+                    **base_event,
+                    'conferenceData': {
+                        'createRequest': {
+                            'requestId': req_id,
+                            'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                        }
+                    }
+                }
+                event = cal_service.events().insert(
+                    calendarId='primary', 
+                    body=event_body,
+                    conferenceDataVersion=1,
+                    sendUpdates='all' if notify_guests else 'none'
+                ).execute()
+                print("DEBUG: Layer 1 Success")
+                return event
+            except Exception as e1:
+                print(f"DEBUG: Layer 1 failed ({e1}), trying Layer 2 (Simple Insert)...")
+                
+                # LAYER 2: Simple insert without Meet (Fail-safe)
+                event = cal_service.events().insert(
+                    calendarId='primary', 
+                    body=base_event,
+                    sendUpdates='all' if notify_guests else 'none'
+                ).execute()
+                print("DEBUG: Layer 2 (Simple Insert) Success")
+                
+                # LAYER 3: Try to add Meet after creation (Optional patch)
+                try:
+                    print("DEBUG: Layer 3 (Patch Meet)...")
+                    patch_body = {
+                        'conferenceData': {
+                            'createRequest': {
+                                'requestId': f"patch_{req_id}",
+                                'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                            }
+                        }
+                    }
+                    patched_event = cal_service.events().patch(
+                        calendarId='primary',
+                        eventId=event['id'],
+                        body=patch_body,
+                        conferenceDataVersion=1
+                    ).execute()
+                    print("DEBUG: Layer 3 Success")
+                    return patched_event
+                except Exception as e3:
+                    print(f"DEBUG: Layer 3 failed ({e3}), sticking with Layer 2 result.")
+                    return event
+
+        except Exception as e:
+            print(f"[X] Critical Error in Google Event: {e}")
+            return None

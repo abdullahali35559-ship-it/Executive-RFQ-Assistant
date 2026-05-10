@@ -566,15 +566,64 @@ class OutlookGraphFetcher:
             }
     
     def send_immediate_email(self, to: str, subject: str, body: str) -> Dict:
-        """Send an email directly without creating a draft first"""
+        """Send a high-end professional HTML email"""
         try:
+            import re
             url = f'{self.base_url}/me/sendMail'
+            
+            # Extract meeting link if present to create a button
+            link_match = re.search(r'https://\S+', body)
+            meeting_link = link_match.group(0) if link_match else "#"
+            # Clean body
+            clean_body = body.replace(meeting_link, "").strip()
+
+            html_body = f"""
+            <html>
+            <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1f2937; background-color: #f9fafb; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <div style="background-color: #111827; padding: 30px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 20px; letter-spacing: 1px; text-transform: uppercase;">Executive Meeting Invitation</h1>
+                        <p style="color: #9ca3af; margin: 10px 0 0; font-size: 14px;">Powered by RFI Enterprise Intelligence</p>
+                    </div>
+                    
+                    <!-- Content -->
+                    <div style="padding: 40px;">
+                        <div style="margin-bottom: 30px; white-space: pre-wrap; font-size: 15px;">
+                            {clean_body.replace('\n', '<br>')}
+                        </div>
+                        
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 40px 0;">
+                            <a href="{meeting_link}" style="background-color: #FF5C35; color: #ffffff; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 10px 15px -3px rgba(255, 92, 53, 0.3);">
+                                JOIN MEETING
+                            </a>
+                        </div>
+                        
+                        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; border-left: 4px solid #FF5C35;">
+                            <p style="margin: 0; font-size: 13px; color: #4b5563;">
+                                <strong>Note:</strong> This meeting has been automatically synchronized with your business calendar. Please ensure you are prepared with all relevant RFI documents.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                            &copy; 2026 RFI Strategic Assistant | Confidential Business Intelligence
+                        </p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
             payload = {
                 "message": {
                     "subject": subject,
                     "body": {
-                        "contentType": "Text",
-                        "content": body
+                        "contentType": "HTML",
+                        "content": html_body
                     },
                     "toRecipients": [
                         {
@@ -596,7 +645,7 @@ class OutlookGraphFetcher:
             else:
                 raise Exception(f"Graph API error: {response.status_code} {response.text}")
         except Exception as e:
-            print(f"[X] Error sending immediate Outlook email: {e}")
+            print(f"[X] Error sending elite Outlook email: {e}")
             return {'success': False, 'error': str(e)}
 
     def delete_draft(self, draft_id: str) -> Dict:
@@ -697,8 +746,9 @@ class OutlookGraphFetcher:
         """Fetch calendar events for the next X days"""
         try:
             from datetime import timedelta
-            start_date = datetime.utcnow()
-            end_date = start_date + timedelta(days=days)
+            # Start from 7 days ago to show history
+            start_date = datetime.utcnow() - timedelta(days=7)
+            end_date = datetime.utcnow() + timedelta(days=days)
             
             start_iso = start_date.isoformat() + 'Z'
             end_iso = end_date.isoformat() + 'Z'
@@ -759,19 +809,49 @@ class OutlookGraphFetcher:
                     "timeZone": "UTC"
                 },
                 "location": {
-                    "displayName": "RFI Managed Meeting"
+                    "displayName": "Online Meeting (Microsoft Teams)"
                 },
+                "isOnlineMeeting": True,
+                "onlineMeetingProvider": "teamsForBusiness",
                 "attendees": [
                     {
-                        "emailAddress": {"address": email},
+                        "emailAddress": {
+                            "address": email
+                        },
                         "type": "required"
                     } for email in (attendees or [])
                 ]
             }
             
             response = requests.post(url, headers=self._get_headers(), json=event_payload, timeout=30)
-            if response.status_code in [200, 201]:
-                return {'success': True, 'event': response.json()}
+            if response.status_code == 201:
+                event_result = response.json()
+                
+                # The joining link in Outlook is joinUrl
+                meeting_link = event_result.get('onlineMeeting', {}).get('joinUrl')
+                if not meeting_link:
+                    meeting_link = event_result.get('webLink') # Fallback
+                
+                # Auto-update description with the link for immediate box visibility
+                try:
+                    patch_payload = {
+                        "body": {
+                            "contentType": "HTML",
+                            "content": f"{description}<br><br><strong>JOIN MEETING:</strong> <a href='{meeting_link}'>{meeting_link}</a>"
+                        }
+                    }
+                    requests.patch(
+                        f"{self.base_url}/me/events/{event_result['id']}",
+                        headers=self._get_headers(),
+                        json=patch_payload,
+                        timeout=30
+                    )
+                except: pass
+                
+                # Important: We want joinUrl for the button
+                event_result['webLink'] = meeting_link
+                
+                return {'success': True, 'event': event_result}
             else:
                 raise Exception(f"Outlook API error: {response.status_code} {response.text}")
         except Exception as e:

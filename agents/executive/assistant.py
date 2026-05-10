@@ -13,7 +13,7 @@ class ExecutiveAssistant:
         self.db = db
         self.llm = PixtralClient()
 
-    def answer_query(self, query: str, conversation_id: Optional[int] = None, mode: str = 'enterprise') -> str:
+    def answer_query(self, query: str, conversation_id: Optional[int] = None, mode: str = 'enterprise', external_context: Optional[str] = None) -> str:
         """Main entry point for assistant chat with multi-mode support"""
         
         # 1. Save User Message
@@ -38,42 +38,53 @@ class ExecutiveAssistant:
 
         # 5. Logic Branching
         if mode == 'general':
-            system_prompt = f"""
-            You are a highly professional 'Business Assistant'.
-            USER PREFERENCES: {user_prefs}
+            system_prompt = """
+            You are a world-class Strategic AI Assistant, providing elite-level intelligence, definitions, and general knowledge.
+            Your persona is direct, intellectual, and professional.
             
-            FORMATTING RULES:
-            - DO NOT use markdown headers like # or ## or ###.
-            - Use **BOLD** for section titles.
-            - Use bullet points for lists.
-            - Tone: Strictly professional and concise. Address user as 'Sir'.
+            SECURITY DIRECTIVE: 
+            You are in GENERAL MODE. You do NOT have access to any local RFI system records, emails, or project data. 
+            If asked about the user's specific project data while in this mode, explain that you are in General Intelligence mode and they should switch to Enterprise mode for project-specific analysis.
+            
+            STRICT FORMATTING RULES:
+            1. NEVER use any markdown symbols. No asterisks (**), no hashes (##), no dashes (---).
+            2. HEADINGS: Use only PLAIN TEXT in ALL UPPERCASE (e.g., STRATEGIC ANALYSIS).
+            3. LISTS: Use simple bullets like - or 1., 2., 3.
+            4. SPACING: Use double newlines between sections for clarity.
             """
-            user_prompt = f"USER QUESTION: {query}\n\nANSWER:"
-            context_data = ""
-            temperature = 0.5
+            
+            context_note = ""
+            if external_context:
+                context_note = f"\n\n[UPLOADED DOCUMENT CONTENT]:\n{external_context[:10000]}\n\n(Focus your analysis on the document above if relevant to the question.)"
+            
+            user_prompt = f"USER QUESTION: {query}\n{context_note}\n\nProvide a concise and professional response."
+            temperature = 0.7
         else:
-            # --- RFI EXECUTIVE ASSISTANT MODE ---
+            # --- RFI ENTERPRISE MODE (Context Aware) ---
             context_data = self._retrieve_context(query)
             
+            # Combine with external context if provided
+            if external_context:
+                context_data = f"[DIRECTLY UPLOADED DOCUMENT]:\n{external_context[:8000]}\n\n---\n\n[SYSTEM INTELLIGENCE CONTEXT]:\n{context_data}"
+            
             system_prompt = f"""
-            You are the 'RFI Chief of Staff'—the elite Executive Assistant for Abdullah.
-            Inspiration: Fyxer AI / Athena Chief of Staff.
+            You are the RFI Executive Assistant—the elite Chief of Staff for Abdullah.
+            
+            STRICT FORMATTING RULES:
+            1. NEVER use any markdown symbols. No asterisks (**), no hashes (##), no dashes (---).
+            2. HEADINGS: Use only PLAIN TEXT in ALL UPPERCASE (e.g., EXECUTIVE BRIEFING).
+            3. LISTS: Use simple bullets like - or 1., 2., 3.
+            4. SPACING: Use double newlines between sections for clarity.
+            5. STYLE: Professional, direct, and elite. No conversational filler.
             
             EXECUTIVE CONTEXT & PREFERENCES:
             {user_prefs}
             
             CORE INTELLIGENCE DIRECTIVES:
             - AUTONOMOUS FOLLOW-UPS: Identify sent emails from context that have NO reply. Offer to draft reminders.
-            - FINANCIAL INTELLIGENCE: Aggregate any dollar ($) or PKR amounts found in context into a 'Financial Brief'.
-            - MEETING TO TASK: If calendar context shows a recent meeting with a description, extract action items.
-            - STRATEGIC IMPACT: Explain the consequence of every urgent item.
-            
-            FORMATTING RULES (CRITICAL):
-            - NEVER use markdown symbols like #, ##, ###, or **. These are unprofessional for a clean executive briefing.
-            - Use BOLD-STYLE UPPERCASE for main sections (e.g. URGENT ITEMS) without any symbols.
-            - Use professional, spacing-heavy layout for clarity.
-            
-            TONE: Authoritative, concise, ultra-professional. Address user as 'Sir'.
+            - FINANCIAL INTELLIGENCE: Aggregate amounts found in context into a 'FINANCIAL BRIEF'.
+            - MEETING TO TASK: Extract action items from calendar descriptions.
+            - STRATEGIC IMPACT: Explain the consequence of urgent items.
             """
             
             user_prompt = f"""
